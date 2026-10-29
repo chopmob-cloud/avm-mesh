@@ -1,0 +1,54 @@
+"""Shared fixtures: the real mainnet bundle, and an independently-derived anchor."""
+import base64
+import gzip
+import json
+import os
+import pathlib
+
+import pytest
+
+DEFAULT_FIXTURE = (
+    pathlib.Path(__file__).resolve().parents[2]
+    / "avm-proofpack" / "tests" / "fixtures"
+    / "stake_attested_algorand_66457600.json.gz"
+)
+GENESIS = "wGHE2Pwdvd7S12BL5FaOP20EGYesN73ktiC1qzkkit8="
+
+
+@pytest.fixture(scope="session")
+def bundle():
+    path = pathlib.Path(os.environ.get("AVM_MESH_FIXTURE", DEFAULT_FIXTURE))
+    if not path.exists():
+        pytest.skip(f"fixture not present at {path}")
+    with gzip.open(path, "rt", encoding="utf-8") as f:
+        return json.load(f)
+
+
+@pytest.fixture(scope="session")
+def anchor(bundle):
+    """A TrustedVoters anchor.
+
+    In production this comes from a pinned genesis bootstrap or a chain walk.
+    Here it is taken from the fixture's previous interval so the code path is
+    exercised -- tests document that, they do not claim it is independent.
+    """
+    from avm_proofpack.verify import TrustedVoters
+
+    prev = bundle["previous_state_proof_message"]
+    return TrustedVoters(
+        voters_commitment=base64.b64decode(prev["voters_commitment_b64"]),
+        ln_proven_weight=int(prev["ln_proven_weight"]),
+    )
+
+
+@pytest.fixture(scope="session")
+def wrong_anchor(bundle):
+    """An anchor that is not the one this bundle was attested under."""
+    from avm_proofpack.verify import TrustedVoters
+
+    prev = bundle["previous_state_proof_message"]
+    return TrustedVoters(
+        voters_commitment=base64.b64decode(prev["voters_commitment_b64"]),
+        ln_proven_weight=int(prev["ln_proven_weight"]) + 1,
+    )
+

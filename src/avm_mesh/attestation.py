@@ -203,11 +203,16 @@ def verify_attestation(attestation: ConsensusAttestation | dict,
     if int(trusted_voters.ln_proven_weight) != attestation.anchor_ln_proven_weight:
         raise MeshError("anchor mismatch: proven weight differs from the attestation")
 
-    if expected_genesis_hash_b64 is not None and \
-            attestation.genesis_hash_b64 != expected_genesis_hash_b64:
-        raise MeshError(
-            "genesis hash mismatch: attestation is anchored to a different chain"
-        )
+    expected_gh_bytes: bytes | None = None
+    if expected_genesis_hash_b64 is not None:
+        if attestation.genesis_hash_b64 != expected_genesis_hash_b64:
+            raise MeshError(
+                "genesis hash mismatch: attestation is anchored to a different chain"
+            )
+        try:
+            expected_gh_bytes = _unb64(expected_genesis_hash_b64)
+        except Exception as exc:
+            raise MeshError("expected genesis hash is not valid base64") from exc
 
     try:
         bundle = resolve(attestation.evidence_uri)
@@ -228,8 +233,16 @@ def verify_attestation(attestation: ConsensusAttestation | dict,
     from avm_proofpack.bundle import Bundle
     from avm_proofpack.verify import verify_bundle
 
+    # Pass the pin down so avm-proofpack enforces it against the *authenticated*
+    # block header ('gh' is inside the signed header), not against a field the
+    # evidence author chose. Without this the pin would only ever be compared to
+    # the attestation's own self-asserted genesis_hash_b64 above.
     try:
-        report = verify_bundle(Bundle.from_dict(bundle), trusted_voters=trusted_voters)
+        report = verify_bundle(
+            Bundle.from_dict(bundle),
+            trusted_voters=trusted_voters,
+            expected_genesis_hash=expected_gh_bytes,
+        )
     except Exception as exc:
         raise MeshError(f"evidence failed verification: {exc}") from exc
 
@@ -239,4 +252,13 @@ def verify_attestation(attestation: ConsensusAttestation | dict,
         raise MeshError("evidence attests a different settlement")
     if report.genesis_id != attestation.chain:
         raise MeshError("evidence is for a different chain")
+    # Bind the recorded genesis hash to the one the evidence actually
+    # authenticates to. This ties the attestation's genesis_hash_b64 field (and
+    # therefore any pin checked against it) to verified data rather than to
+    # metadata the bundle author supplied.
+    if report.genesis_hash_b64 != attestation.genesis_hash_b64:
+        raise MeshError(
+            "genesis hash mismatch: attestation records a genesis hash the "
+            "evidence does not authenticate to"
+        )
     return report

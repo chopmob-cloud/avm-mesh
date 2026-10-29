@@ -124,7 +124,9 @@ LEVEL 2.
 
 ```sh
 python -m avm_mesh verify receipt.json --evidence ./proofpacks \
-    --genesis wGHE2Pwdvd7S12BL5FaOP20EGYesN73ktiC1qzkkit8=
+    --genesis wGHE2Pwdvd7S12BL5FaOP20EGYesN73ktiC1qzkkit8= \
+    --voters-commitment <trusted-voters-commitment-b64> \
+    --ln-proven-weight <proven-weight>
 ```
 
 ```
@@ -134,6 +136,12 @@ consensus:   stake_attested
 trust root:  stake_attested
 attested:    J6FPFF4CKP4XUWUEDLEENV7EV5YDKFZHZJC6UYYWBDVBJLAT7IIA @ round 66457600
 ```
+
+The anchor flags are required whenever the receipt carries a consensus attestation: supply the
+`TrustedVoters` commitment and proven weight you independently trust. A sealed receipt with a LEVEL 3
+block verifies against that anchor and fails closed without it — never from the bundle's own word. The
+genesis pin is likewise enforced against the *authenticated* state-proof header, not the attestation's
+self-declared field.
 
 Exit `0` verified, `2` failed, `3` usage. `--json` for machine output. A real receipt is **945 bytes**
 against an 854 KB proofpack; the proof is stored once per attested interval, not per payment.

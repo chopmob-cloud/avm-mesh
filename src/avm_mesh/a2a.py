@@ -78,8 +78,15 @@ def wants_extension(message_or_params: Any) -> bool:
 def as_artifact(sealed: dict, *, artifact_id: str = "settlement-receipt") -> dict:
     """Wrap a sealed receipt as an A2A Artifact.
 
-    Returns the receipt itself in a `data` part rather than as text, so a
+    Returns the receipt itself in a ``data`` part rather than as text, so a
     receiver never has to parse prose or trust a base64 blob's framing.
+
+    EMITS THE v1.0 FORM. A2A v1.0 removed the inline ``kind`` discriminator as a
+    breaking change (spec appendix A.2.1): a DataPart is now identified by the
+    presence of the ``data`` member, not by a tag. The legacy v0.3.x form was
+    ``{"kind": "data", "data": {...}}``; emitting it against a v1.0 peer makes the
+    part unparseable, because there is no ``kind`` field to read and the extra
+    member is unexpected.
     """
     if not isinstance(sealed, dict):
         raise MeshError("sealed receipt must be an object")
@@ -90,8 +97,8 @@ def as_artifact(sealed: dict, *, artifact_id: str = "settlement-receipt") -> dic
         "artifact_id": artifact_id,
         "name": ARTIFACT_NAME,
         "parts": [{
-            "kind": "data",
             "data": {"avm_mesh_receipt": sealed, "extension": EXTENSION_URI},
+            "mediaType": "application/json",
         }],
     }
 
@@ -114,7 +121,15 @@ def verify_artifact(artifact: dict, resolve: Callable[[str], dict],
 
     payload = None
     for part in parts:
-        if not isinstance(part, dict) or part.get("kind") != "data":
+        if not isinstance(part, dict):
+            continue
+        # v1.0: the presence of "data" identifies a DataPart; the inline `kind`
+        # discriminator was removed (spec appendix A.2.1). v0.3.x peers still send
+        # it, so accept both -- the spec tells implementors to dual-handle during
+        # the overlap period.
+        if "data" not in part:
+            continue
+        if "kind" in part and part.get("kind") != "data":
             continue
         data = part.get("data")
         if isinstance(data, dict) and data.get("extension") == EXTENSION_URI:

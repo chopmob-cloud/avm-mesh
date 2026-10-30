@@ -111,3 +111,56 @@ def test_malformed_artifacts_are_refused(sealed):
         verify_artifact({}, lambda uri: {})
     with pytest.raises(MeshError, match="missing canonical_bytes_b64"):
         as_artifact({"content_hash": "a" * 64})
+
+
+# --- A2A v1.0 conformance -------------------------------------------------
+
+def test_artifact_emits_the_v1_data_part_not_the_legacy_tag(sealed):
+    """v1.0 removed the inline `kind` discriminator (spec appendix A.2.1).
+
+    A legacy {"kind": "data"} part is unparseable to a v1.0 peer: there is no
+    `kind` to read, and the extra member is unexpected.
+    """
+    part = as_artifact(sealed)["parts"][0]
+    assert "kind" not in part, "legacy discriminator must not be emitted"
+    assert "data" in part
+    assert part.get("mediaType") == "application/json"
+
+
+def test_verifier_still_accepts_the_legacy_v0_3_part(sealed, bundle, anchor):
+    """Dual handling: the spec asks implementors to accept both during overlap."""
+    art = as_artifact(sealed)
+    legacy_part = {"kind": "data", "data": art["parts"][0]["data"]}
+    art["parts"] = [legacy_part]
+    out = verify_artifact(art, _resolver(bundle), trusted_voters=anchor,
+                          expected_genesis_hash_b64=GENESIS)
+    assert out["trust_root"] == "stake_attested"
+
+
+def test_verifier_rejects_a_part_whose_kind_contradicts_its_payload(sealed, bundle, anchor):
+    """A `kind: text` part carrying a data payload is malformed, not a data part."""
+    art = as_artifact(sealed)
+    art["parts"] = [{"kind": "text", "data": art["parts"][0]["data"]}]
+    with pytest.raises(MeshError, match="no settlement-evidence payload"):
+        verify_artifact(art, _resolver(bundle), trusted_voters=anchor)
+
+
+def test_extension_descriptor_matches_the_spec_declaration_shape():
+    """Spec 4.6.1: extensions[] entries carry uri (+ optional description/required)."""
+    d = extension_descriptor()
+    assert isinstance(d["uri"], str) and d["uri"].startswith("https://")
+    assert d["uri"].endswith("/v1"), "extension URIs are versioned"
+    assert isinstance(d["required"], bool)
+    assert isinstance(d["description"], str) and d["description"]
+
+
+def test_advertise_preserves_the_v1_card_fields():
+    """v1.0 cards use supportedInterfaces; advertising must not drop them."""
+    card = {"name": "merchant", "supportedInterfaces": [
+        {"url": "https://m.example/a2a/v1", "protocolBinding": "HTTP+JSON",
+         "protocolVersion": "1.0"}],
+        "capabilities": {"streaming": False}}
+    out = advertise(card)
+    assert out["supportedInterfaces"] == card["supportedInterfaces"]
+    assert out["capabilities"]["streaming"] is False
+    assert any(e["uri"] == EXTENSION_URI for e in out["capabilities"]["extensions"])

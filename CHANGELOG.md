@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.4.2
+
+### Fixed — the A2A artifact used a wire format v1.0 removed
+
+A2A **v1.0 removed the inline `kind` discriminator** as a breaking change (spec appendix A.2.1). A DataPart
+is now identified by the presence of the `data` member:
+
+```json
+// v0.3.x (what we emitted)        // v1.0 (what we emit now)
+{"kind": "data", "data": {...}}    {"data": {...}, "mediaType": "application/json"}
+```
+
+Emitting the legacy form to a v1.0 peer produces a part it cannot parse: there is no `kind` to read and the
+extra member is unexpected. `as_artifact()` now emits the current form.
+
+`verify_artifact()` **accepts both**, because the spec asks implementors to dual-handle during the overlap
+period and a peer may still be on 0.3.x. A part whose `kind` contradicts its payload (`kind: text` carrying
+`data`) is still refused.
+
+### Found by
+
+Reading the TCK's own specification rather than assuming conformance. Five new tests pin: the emitted part
+carries no `kind`, the legacy part still verifies, a contradictory `kind` is refused, the extension
+descriptor matches the §4.6.1 declaration shape, and advertising preserves v1.0 `supportedInterfaces`.
+
+### Scope
+
+This is conformance to the **published spec text and schemas**, not a TCK run. Executing the full suite
+needs a running A2A SUT, which is a separate piece of work; saying "TCK-validated" on the strength of these
+tests would be a false claim.
+
 ## 0.4.1
 
 ### Fixed — 0.4.0's rails verifier was not compatible with real rails receipts

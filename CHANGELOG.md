@@ -31,7 +31,15 @@ against a single auditable policy.
 
 ### Notes
 
-- 85 tests. Validated in a VM2 clean-room with a negative control: the harness is proven able to fail.
+- **94 tests**, validated in a **fresh Docker container on VM2** (`avm-mesh-clean`): both wheels installed
+  **offline** (`--no-index`) into a clean `python:3.12-slim`, the suite run against the *installed*
+  package rather than the source tree, 94 collected / 94 passed. Negative control inside the container:
+  disabling the attested-interval guard turned `test_receipt.py` red (1 failed, 13 passed); restoring it
+  returned 14 passed.
+- End-to-end path proven on a **fresh mainnet capture** (round `66474240`, interval
+  `66473985 → 66474240`) with sockets blocked, not only on the original fixture.
+- `docs/OPERATIONS.md`: anchor-first deployment guide, the policy document, and a table of what each pin
+  stops.
 - `avm-proofpack>=0.4.1` is required. That release made `stake_attested` anchor-required after the
   tier was found forgeable; 0.1.x of this package inherited the flaw and is superseded.
 - Deliberately absent: a round-inside-interval check. It is unreachable given the interval equality,

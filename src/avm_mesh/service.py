@@ -21,11 +21,23 @@ from __future__ import annotations
 import hashlib
 import json
 import pathlib
+import re
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
 from .receipt import MeshError, SettlementReceipt, bundle_digest
+
+# A stored artefact is addressed by a single name, never a path. Allowing a
+# separator, a dot-segment or a NUL would let a request walk out of the store
+# and read or write an arbitrary file: the courier must not pick the bytes.
+_SAFE_NAME = re.compile(r"\A[A-Za-z0-9_-]{1,128}\Z")
+
+
+def _safe_name(value: str, kind: str) -> str:
+    if not isinstance(value, str) or not _SAFE_NAME.match(value):
+        raise MeshError(f"{kind} is not a valid store name")
+    return value
 
 
 class Store:
@@ -53,6 +65,7 @@ class Store:
     def put_receipt(self, receipt: SettlementReceipt) -> str:
         if not isinstance(receipt, SettlementReceipt):
             raise MeshError("put_receipt expects a SettlementReceipt")
+        _safe_name(receipt.txid, "txid")
         path = self.receipts / f"{receipt.txid}.json"
         tmp = path.with_suffix(".tmp")
         tmp.write_text(json.dumps(receipt.to_dict()), encoding="utf-8")
@@ -61,6 +74,7 @@ class Store:
 
     # -- reads ----------------------------------------------------------
     def get_proofpack(self, digest: str) -> dict:
+        _safe_name(digest, "digest")
         path = self.proofpacks / f"{digest}.json"
         if not path.is_file():
             raise FileNotFoundError(digest)
@@ -72,6 +86,7 @@ class Store:
         return bundle
 
     def get_receipt(self, txid: str) -> dict:
+        _safe_name(txid, "txid")
         path = self.receipts / f"{txid}.json"
         if not path.is_file():
             raise FileNotFoundError(txid)

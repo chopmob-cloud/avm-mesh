@@ -4,7 +4,9 @@ The service is a courier, so the tests are about it being unable to help an
 attacker even if it tried: content-addressed storage, corruption detected on
 read, and an end-to-end verification that never trusts the server's word.
 """
+import http.client
 import json
+import pathlib
 import urllib.error
 import urllib.request
 
@@ -40,6 +42,39 @@ def test_a_tampered_blob_is_detected_on_read(store_dir):
 def test_missing_proofpack_raises(store_dir):
     with pytest.raises(FileNotFoundError):
         Store(store_dir).get_proofpack("0" * 64)
+
+
+def test_store_refuses_traversal_names(store_dir, tmp_path):
+    """A name is a single store entry, never a path: no segment may escape."""
+    s = Store(store_dir)
+    secret = tmp_path / "outside.json"
+    secret.write_text(json.dumps({"secret": "nope"}), encoding="utf-8")
+    for bad in ("../outside", "../../outside", "a/b", "..", "with.dot", "a\\b"):
+        with pytest.raises(MeshError, match="not a valid store name"):
+            s.get_receipt(bad)
+        with pytest.raises(MeshError, match="not a valid store name"):
+            s.get_proofpack(bad)
+
+
+def test_service_endpoint_does_not_serve_files_outside_the_store(store_dir, tmp_path):
+    """The witness must not return a .json file reached by walking out of root."""
+    s = Store(store_dir)
+    (pathlib.Path(s.receipts).parent / "in_root.json").write_text(
+        json.dumps({"secret": "in-root"}), encoding="utf-8")
+    server, _ = run_in_thread(s)
+    port = server.server_address[1]
+    try:
+        # Send the literal '..' path a raw attacker would, bypassing any
+        # client-side normalisation, exactly as the original PoC did.
+        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+        conn.request("GET", "/receipts/../in_root")
+        resp = conn.getresponse()
+        body = resp.read()
+        assert resp.status != 200
+        assert b"in-root" not in body
+    finally:
+        server.shutdown()
+        server.server_close()
 
 
 def test_witness_info_requires_identity(store_dir):

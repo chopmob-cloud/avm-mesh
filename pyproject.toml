@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "avm-mesh"
-version = "0.2.1"
+version = "0.2.2"
 description = "Settlement receipts for the AVM mesh: digest-and-pointer evidence that resolves to a verifiable proofpack"
 requires-python = ">=3.10"
 license = {text = "Apache-2.0"}

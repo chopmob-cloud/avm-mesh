@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.2.2
+
+### Fixed
+
+- **Witness equivocation.** `put_receipt` overwrote unconditionally, so a witness could serve one receipt
+  for a transaction, let a client verify it, then replace it with a different receipt (other tier, pointer
+  or corroboration) for the next client. Both receipts can be individually valid — the *service* is the
+  attack. Receipts are now append-only per transaction: an identical rewrite is idempotent, a different
+  one is refused.
+- **Stored receipts are now corruption-checked on read**, via a `<txid>.sha256` sidecar written with the
+  receipt, matching the discipline proofpacks already had (the filename is the digest).
+
+### Notes
+
+- Found by attacking my own module rather than waiting for review: the question was "what can this
+  service do that a verifier would not notice", and the answer was replace its own history.
+
 ## 0.2.1
 
 ### Fixed

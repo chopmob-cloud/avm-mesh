@@ -92,13 +92,32 @@ class Store:
         return digest
 
     def put_receipt(self, receipt: SettlementReceipt) -> str:
+        """Store a receipt, refusing to replace a different one for the same txid.
+
+        Receipts are append-only per txid. Without this a witness can equivocate:
+        serve one receipt to a client that verifies it, then quietly replace it
+        with another (a different tier, pointer or corroboration) for the next
+        client. Both receipts may be individually valid; the *service* would be
+        the attack. Identical re-writes are idempotent, so a retry is harmless.
+        """
         if not isinstance(receipt, SettlementReceipt):
             raise MeshError("put_receipt expects a SettlementReceipt")
         _safe_name(receipt.txid, "txid")
+        payload = json.dumps(receipt.to_dict(), sort_keys=True, separators=(",", ":"))
+        digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
         path = self.receipts / f"{receipt.txid}.json"
+        if path.is_file():
+            existing = hashlib.sha256(path.read_text(encoding="utf-8").encode("utf-8")).hexdigest()
+            if existing != digest:
+                raise MeshError(
+                    f"receipt for {receipt.txid} already exists with different content; "
+                    "refusing to replace it"
+                )
+            return receipt.txid
         tmp = path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(receipt.to_dict()), encoding="utf-8")
+        tmp.write_text(payload, encoding="utf-8")
         tmp.replace(path)
+        (self.receipts / f"{receipt.txid}.sha256").write_text(digest, encoding="utf-8")
         return receipt.txid
 
     # -- reads ----------------------------------------------------------
@@ -121,7 +140,16 @@ class Store:
         _within_store(self.receipts, path)
         if not path.is_file():
             raise FileNotFoundError(txid)
-        return json.loads(path.read_text(encoding="utf-8"))
+        raw = path.read_text(encoding="utf-8")
+        sidecar = self.receipts / f"{txid}.sha256"
+        if sidecar.is_file():
+            expected = sidecar.read_text(encoding="utf-8").strip()
+            actual = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+            if actual != expected:
+                raise MeshError(
+                    f"stored receipt {txid} no longer matches its recorded digest"
+                )
+        return json.loads(raw)
 
     @staticmethod
     def uri_for(digest: str) -> str:

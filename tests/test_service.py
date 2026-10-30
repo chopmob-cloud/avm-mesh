@@ -172,3 +172,51 @@ def test_unknown_paths_are_404(store_dir):
 @pytest.fixture()
 def store_dir(tmp_path):
     return tmp_path / "store"
+
+
+# --- equivocation and corruption -----------------------------------------
+
+def _receipt(bundle, anchor, uri="proofpack:" + "0" * 64, **over):
+    from avm_mesh.receipt import create_receipt
+    r = create_receipt(bundle, uri, trusted_voters=anchor)
+    return r if not over else type(r).from_dict({**r.to_dict(), **over})
+
+
+def test_identical_receipt_rewrite_is_idempotent(bundle, anchor, store_dir):
+    """A retry must be harmless: same content, same result."""
+    s = Store(store_dir)
+    r = _receipt(bundle, anchor)
+    s.put_receipt(r)
+    s.put_receipt(r)  # must not raise
+    assert s.get_receipt(r.txid)["txid"] == r.txid
+
+
+def test_conflicting_receipt_for_same_txid_is_refused(bundle, anchor, store_dir):
+    """A witness must not be able to swap a receipt it already published.
+
+    Both receipts are individually well-formed; the attack is the service
+    serving one and then the other.
+    """
+    s = Store(store_dir)
+    honest = _receipt(bundle, anchor)
+    s.put_receipt(honest)
+
+    # same txid, different corroboration -> different content
+    conflicting = type(honest).from_dict({**honest.to_dict(),
+                                          "corroboration": ["w1", "w2"]})
+    with pytest.raises(MeshError, match="already exists with different content"):
+        s.put_receipt(conflicting)
+
+    # the original is still what is served
+    assert s.get_receipt(honest.txid)["corroboration"] == list(honest.corroboration)
+
+
+def test_tampered_receipt_file_is_detected_on_read(bundle, anchor, store_dir):
+    s = Store(store_dir)
+    r = _receipt(bundle, anchor)
+    s.put_receipt(r)
+    path = s.receipts / f"{r.txid}.json"
+    path.write_text(path.read_text().replace("stake_attested", "corroborated"),
+                    encoding="utf-8")
+    with pytest.raises(MeshError, match="no longer matches its recorded digest"):
+        s.get_receipt(r.txid)

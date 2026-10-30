@@ -12,6 +12,7 @@ Three properties matter, and each is enforced rather than documented:
 """
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 from dataclasses import dataclass, field
@@ -136,11 +137,15 @@ class SettlementReceipt:
             raise MeshError(f"receipt has an unusable field: {exc}") from exc
 
 
-def _verify_bundle_dict(bundle: dict, trusted_voters=None):
+def _verify_bundle_dict(bundle: dict, trusted_voters=None, expected_genesis_hash=None):
     from avm_proofpack.bundle import Bundle
     from avm_proofpack.verify import verify_bundle
 
-    return verify_bundle(Bundle.from_dict(bundle), trusted_voters=trusted_voters)
+    return verify_bundle(
+        Bundle.from_dict(bundle),
+        trusted_voters=trusted_voters,
+        expected_genesis_hash=expected_genesis_hash,
+    )
 
 
 def create_receipt(bundle: dict, uri: str, corroboration: tuple[str, ...] = (), *,
@@ -173,7 +178,8 @@ def verify_receipt(receipt: SettlementReceipt | dict,
                    *, expected_chain: str | None = None,
                    witness_set: Any = None,
                    corroboration_threshold: int = 0,
-                   trusted_voters: Any = None) -> Any:
+                   trusted_voters: Any = None,
+                   expected_genesis_hash_b64: str | None = None) -> Any:
     """Resolve the pointer, prove the bundle is the one committed to, verify it.
 
     Returns the proofpack verification report. Raises MeshError on any mismatch.
@@ -194,6 +200,21 @@ def verify_receipt(receipt: SettlementReceipt | dict,
             f"receipt is for chain {receipt.chain!r}, verifier expected {expected_chain!r}"
         )
 
+    # Pin the chain to the AUTHENTICATED header rather than to the receipt's
+    # chain id string, which a fork can reuse. avm-proofpack checks the genesis
+    # hash against the signed block header, so this is the only binding an
+    # adversary cannot author.
+    expected_genesis_bytes = None
+    if expected_genesis_hash_b64 is not None:
+        try:
+            expected_genesis_bytes = base64.b64decode(
+                expected_genesis_hash_b64.encode("ascii"), validate=True
+            )
+        except Exception as exc:
+            raise MeshError("expected genesis hash is not valid base64") from exc
+        if len(expected_genesis_bytes) != 32:
+            raise MeshError("expected genesis hash must be 32 bytes")
+
     try:
         bundle = resolve(receipt.pointer.uri)
     except MeshError:
@@ -212,7 +233,7 @@ def verify_receipt(receipt: SettlementReceipt | dict,
         )
 
     try:
-        report = _verify_bundle_dict(bundle, trusted_voters)
+        report = _verify_bundle_dict(bundle, trusted_voters, expected_genesis_bytes)
     except Exception as exc:
         raise MeshError(f"bundle failed verification: {exc}") from exc
 
@@ -221,6 +242,21 @@ def verify_receipt(receipt: SettlementReceipt | dict,
     if report.genesis_id != receipt.chain:
         raise MeshError(
             f"resolved bundle is for chain {report.genesis_id!r}, receipt says {receipt.chain!r}"
+        )
+
+    # The attested interval is a claim about WHICH state proof covers this
+    # settlement. Unchecked, a receipt can point at a real proofpack that attests
+    # a different interval and still read as verified.
+    #
+    # Note the round-in-interval containment is deliberately NOT re-checked: it
+    # follows from this equality plus the round binding above, and from
+    # avm-proofpack only verifying rounds inside their own interval.
+    if (report.first_attested_round, report.last_attested_round) != (
+            receipt.pointer.first_attested_round, receipt.pointer.last_attested_round):
+        raise MeshError(
+            f"attested interval mismatch: receipt says "
+            f"[{receipt.pointer.first_attested_round}, {receipt.pointer.last_attested_round}], "
+            f"evidence attests [{report.first_attested_round}, {report.last_attested_round}]"
         )
 
     if witness_set is not None or corroboration_threshold > 0:

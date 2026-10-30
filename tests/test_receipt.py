@@ -117,3 +117,51 @@ def test_malformed_receipts_are_rejected():
     with pytest.raises(MeshError):
         SettlementReceipt.from_dict({"version": 1, "chain": "c", "txid": "t", "round": 1,
                                      "trust_root": "trust_me", "pointer": {}})
+
+
+ALGORAND_GENESIS_B64 = "wGHE2Pwdvd7S12BL5FaOP20EGYesN73ktiC1qzkkit8="
+VOI_GENESIS_B64 = "r20fSQI8gWe/kFZziNonSPCXLwcQmH/nxROvnnueWOk="
+
+
+def test_genesis_pin_is_enforced_against_the_authenticated_header(bundle, anchor):
+    """A chain id string can be reused by a fork; only the genesis hash cannot."""
+    receipt = create_receipt(bundle, "file://proofpack.json", trusted_voters=anchor)
+    report = verify_receipt(receipt, _resolver(bundle), trusted_voters=anchor,
+                            expected_genesis_hash_b64=ALGORAND_GENESIS_B64)
+    assert report.genesis_hash_b64 == ALGORAND_GENESIS_B64
+
+
+def test_wrong_genesis_pin_is_refused(bundle, anchor):
+    receipt = create_receipt(bundle, "file://proofpack.json", trusted_voters=anchor)
+    with pytest.raises(MeshError):
+        verify_receipt(receipt, _resolver(bundle), trusted_voters=anchor,
+                       expected_genesis_hash_b64=VOI_GENESIS_B64)
+
+
+def test_malformed_genesis_pin_is_refused(bundle, anchor):
+    receipt = create_receipt(bundle, "file://proofpack.json", trusted_voters=anchor)
+    with pytest.raises(MeshError, match="not valid base64"):
+        verify_receipt(receipt, _resolver(bundle), trusted_voters=anchor,
+                       expected_genesis_hash_b64="!!!not base64!!!")
+
+
+def test_short_genesis_pin_is_refused(bundle, anchor):
+    receipt = create_receipt(bundle, "file://proofpack.json", trusted_voters=anchor)
+    with pytest.raises(MeshError, match="must be 32 bytes"):
+        verify_receipt(receipt, _resolver(bundle), trusted_voters=anchor,
+                       expected_genesis_hash_b64="AAAA")
+
+
+def test_attested_interval_claim_must_match_the_evidence(bundle, anchor):
+    """A real proofpack attesting a different interval must not pass.
+
+    Round is left honest so the identity check passes and only the interval
+    guard can catch this.
+    """
+    receipt = create_receipt(bundle, "file://proofpack.json", trusted_voters=anchor)
+    pointer = dict(receipt.pointer.to_dict())
+    pointer["first_attested_round"] -= 256
+    pointer["last_attested_round"] -= 256
+    forged = SettlementReceipt.from_dict({**receipt.to_dict(), "pointer": pointer})
+    with pytest.raises(MeshError, match="attested interval mismatch"):
+        verify_receipt(forged, _resolver(bundle), trusted_voters=anchor)

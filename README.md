@@ -54,6 +54,19 @@ transaction. The receipt commits to it by digest and points at it.
 3. **Identity.** Chain, txid and round are taken from verification, not from the caller. A perfectly
    valid bundle for a different transaction is not evidence for this one.
 
+Pass `expected_genesis_hash_b64` to pin the chain itself:
+
+```python
+verify_receipt(receipt, resolve=storage.read, trusted_voters=anchor,
+               expected_genesis_hash_b64="wGHE2Pwdvd7S12BL5FaOP20EGYesN73ktiC1qzkkit8=")
+```
+
+Without it, `receipt.chain` is only checked against the bundle's genesis **id** — a string a fork can
+reuse. With it, the hash is enforced against the authenticated block header, which no evidence author
+can choose. The receipt's claimed attested interval must also equal the interval the evidence actually
+attests; otherwise a receipt can point at a real proofpack covering a different interval and still read
+as verified.
+
 ```python
 from avm_mesh import create_receipt, verify_receipt
 

@@ -78,6 +78,34 @@ assert report.trust_root == "stake_attested"
 `resolve` is caller-supplied, so storage is agnostic: a file, an HTTP endpoint, a chain.
 
 
+
+## The framework, end to end
+
+| Component | Role |
+|---|---|
+| `produce` | settler side: store evidence, then seal a receipt |
+| `service` | **witness**: serves receipts and content-addressed proofpacks |
+| `receipt` | digest + pointer, three enforced bindings |
+| `attestation` | LEVEL 3 consensus attestation, anchor-required |
+| `sealed` | wire format the rails already speak |
+| `trust` | one auditable policy holding every pin |
+| `bond` | witness bonds and enforced independence |
+| `a2a` | settlement-evidence extension |
+| `cli` | offline verifier, `avm-mesh verify` / `avm-mesh serve` |
+
+A deployment needs two things to be safe: an **anchor** it obtained itself, and a **policy** that pins
+chain, genesis hash, anchor and witness set in one document. Everything else is mechanism.
+
+```sh
+# a witness publishes evidence
+avm-mesh serve --root ./store --port 8080 --witness-id w1 --operator-id op-a --escrow-txid ESC
+
+# a merchant verifies a receipt against its own policy
+avm-mesh verify receipt.json --evidence ./proofpacks \
+    --genesis wGHE2Pwdvd7S12BL5FaOP20EGYesN73ktiC1qzkkit8= \
+    --voters-commitment <b64> --ln-proven-weight <n>
+```
+
 ## LEVEL 3: consensus attestation for the rails receipt
 
 The AlgoVoi Payment Rails receipt already has two levels:
@@ -250,7 +278,8 @@ word"* is a stronger offer than claiming all seven are equal, because the mercha
 
 ## Status
 
-`0.1.1` — receipt format, verification, LEVEL 3 consensus attestation (anchor-required), and the A2A extension.
+`0.2.0` — producer path, witness service, trust policy, receipts, LEVEL 3 attestation, A2A extension.
+**85 tests**, validated in a VM2 clean-room.
 
 **Dependency:** requires `avm-proofpack>=0.4.1` and is verified against **0.4.1 @ `02d2516`**, where the
 `stake_attested` tier became anchor-required. `avm-mesh` 0.1.x followed that fix: LEVEL 3 no longer

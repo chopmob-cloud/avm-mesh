@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.3.0
+
+### Fixed — the settlement amount is now bound to the transaction
+
+A receipt carried an `amount` supplied by the producer, and nothing compared it to what the transaction
+actually moved. A merchant reading `stake_attested` next to that figure would reasonably, and wrongly,
+read the amount as attested too. New `avm_mesh.effects` reads the amount out of the **authenticated**
+`SignedTxnInBlock` via `avm-effectproof`, after `verify_bundle` has proven those bytes, and binds it in
+both `produce()` and `verify_sealed()`.
+
+Fail-closed by construction: any shape whose amount cannot be mapped to a single unambiguous on-chain
+transfer — an app call, a key registration, a close-remainder, an asset the transaction did not move —
+is refused. A receipt gets to assert an amount only when the evidence proves that exact amount moved.
+
+Contributed by Claude/Codex with mutation evidence for both guards (produce: 1 failed → restored 5
+passed; verify_sealed: 1 failed → restored 10 passed).
+
+### Changed — new required dependency
+
+`avm-effectproof>=0.1.1`. Its wheel must be staged alongside `avm-proofpack` for an offline install.
+
+### Docs corrected
+
+- `bond.py` no longer claims to be "verifiable on-chain". It reasons over **declared** bond values and
+  does not read the chain; "bonded" means "claims a stake at or above the floor".
+- The review request's "LEVEL 2 has never seen a real key" was overstated once the `pqcrypto` dependency
+  was removed; it now states precisely what the KAT vectors prove and what remains unproven.
+
+### Notes
+
+- **202 tests, 0 skipped**, clean-room green in a fresh Docker container on VM2 with an offline
+  `--no-index` install of `avm_mesh` + `avm_effectproof` + `avm_proofpack`, the suite run against
+  site-packages, and the `tools/cleanroom.sh` gate enforcing skips-as-failures.
+- 201 passed + 1 skipped on a Windows host, where the symlink-refusal test cannot plant a symlink.
+
 ## 0.2.2
 
 ### Fixed

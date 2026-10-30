@@ -124,6 +124,34 @@ def verify_sealed(sealed: dict, resolve: Callable[[str], dict],
         )
         levels["consensus"] = "stake_attested"
 
+    # LEVEL 1.5 -- amount binding. A settlement's stated amount is a figure the
+    # producer chose; the attestation above proves which transaction settled, not
+    # how much moved. Where there is a consensus attestation, re-read the amount
+    # out of the same authenticated evidence and refuse any receipt whose figure
+    # the transaction does not bear out -- otherwise a reader would see a stated
+    # amount beside a stake_attested trust root and take the amount as attested
+    # too. Without an attestation there is no authenticated transaction to bind
+    # against, so the amount is reported honestly as present-but-unbound rather
+    # than silently trusted.
+    settlement = content.get("settlement")
+    if not isinstance(settlement, dict) or "amount" not in settlement:
+        levels["amount"] = None
+    elif att_dict is None:
+        levels["amount"] = "present-unbound"
+    else:
+        from .effects import verify_settlement_amount
+        from .receipt import bundle_digest
+
+        bundle = resolve(att_dict["evidence_uri"])
+        if not isinstance(bundle, dict):
+            raise MeshError("resolver returned something that is not a proofpack")
+        if bundle_digest(bundle) != att_dict["evidence_digest"]:
+            raise MeshError(
+                "evidence behind the amount binding does not match the attestation"
+            )
+        verify_settlement_amount(bundle, settlement, report.genesis_id)
+        levels["amount"] = "bound"
+
     return {
         "levels": levels,
         "trust_root": "stake_attested" if levels["consensus"] == "stake_attested" else "structural",

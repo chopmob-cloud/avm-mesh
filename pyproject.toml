@@ -8,7 +8,7 @@ version = "0.2.2"
 description = "Settlement receipts for the AVM mesh: digest-and-pointer evidence that resolves to a verifiable proofpack"
 requires-python = ">=3.10"
 license = {text = "Apache-2.0"}
-dependencies = ["avm-proofpack>=0.4.1"]
+dependencies = ["avm-proofpack>=0.4.1", "avm-effectproof>=0.1.1"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

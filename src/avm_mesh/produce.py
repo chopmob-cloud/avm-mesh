@@ -2,19 +2,24 @@
 
 This is the settler's side. It ties the three pieces together:
 
-    capture (avm-proofpack) -> store the proofpack -> seal a receipt
+    capture (avm-proofpack) -> validate everything -> persist evidence -> receipt
 
-The ordering is deliberate. The proofpack is stored BEFORE the receipt is
-sealed, so the receipt can carry the store's own canonical URI and the digest of
-the bytes actually on disk -- not of bytes that were about to be written. A
-receipt that points at evidence which failed to persist is worse than no receipt.
+The ordering is deliberate. The content address is derived from the bundle up
+front, so the receipt commits to it, and EVERYTHING is validated -- tier, digest,
+and that the stated amount matches what the transaction actually moved -- BEFORE
+anything is written. Only then is the proofpack persisted, and only then the
+receipt that points at it, with the stored digest asserted equal to the one the
+receipt commits to. A produce() call therefore either publishes evidence and a
+receipt together or writes nothing at all: a refusal leaves no orphaned blob, and
+a receipt never names bytes that failed to land.
 """
 from __future__ import annotations
 
 import json
 from typing import Any
 
-from .receipt import MeshError, SettlementReceipt, create_receipt
+from .effects import verify_settlement_amount
+from .receipt import MeshError, SettlementReceipt, bundle_digest, create_receipt
 from .sealed import seal
 from .service import Store
 
@@ -54,7 +59,9 @@ def produce(bundle: dict, store: Store, *, trusted_voters: Any, amount: str,
     if not isinstance(store, Store):
         raise MeshError("produce() needs a Store to persist the evidence")
 
-    digest = store.put_proofpack(bundle)
+    # Derive the content address from the bundle itself; nothing is written yet,
+    # so a receipt we end up refusing leaves no orphaned proofpack behind.
+    digest = bundle_digest(bundle)
     uri = store.uri_for(digest)
 
     receipt = create_receipt(bundle, uri, corroboration=corroboration,
@@ -69,8 +76,24 @@ def produce(bundle: dict, store: Store, *, trusted_voters: Any, amount: str,
             "capture the previous state-proof interval and supply the anchor"
         )
 
-    # The receipt must reference the bytes we actually stored.
+    # The receipt must reference the content address we derived.
     if receipt.pointer.digest != digest:
+        raise MeshError(
+            "proofpack digest disagrees with the receipt; refusing to publish"
+        )
+
+    # Bind the stated amount to what the transaction actually did, against the
+    # STIB the receipt's own evidence just authenticated. produce() will not
+    # issue a receipt whose amount the evidence does not bear out -- an honest
+    # fat-finger and a hostile over-statement fail the same way, here, before
+    # anything is published.
+    verify_settlement_amount(bundle, {"amount": amount, "asset": asset},
+                             receipt.chain)
+
+    # Everything checked: persist the evidence, then the receipt that points at
+    # it, and confirm the bytes that landed hash to what the receipt commits to.
+    stored = store.put_proofpack(bundle)
+    if stored != digest:
         raise MeshError(
             "stored proofpack digest disagrees with the receipt; refusing to publish"
         )

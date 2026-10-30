@@ -10,7 +10,9 @@ from avm_mesh.service import Store
 
 def test_produce_stores_evidence_then_issues_a_verifiable_receipt(bundle, anchor, tmp_path):
     store = Store(tmp_path)
-    receipt, sealed = produce(bundle, store, trusted_voters=anchor, amount="1000000",
+    # The fixture transaction is a 1-microalgo payment, so a truthful receipt
+    # states amount "1"; anything else is refused (see the binding test below).
+    receipt, sealed = produce(bundle, store, trusted_voters=anchor, amount="1",
                               issuer="AlgoVoi")
 
     assert receipt.trust_root == "stake_attested"
@@ -24,11 +26,28 @@ def test_produce_stores_evidence_then_issues_a_verifiable_receipt(bundle, anchor
 
 def test_produce_serialises_a_sealed_envelope_when_a_signer_is_given(bundle, anchor, tmp_path):
     store = Store(tmp_path)
-    receipt, sealed = produce(bundle, store, trusted_voters=anchor, amount="1000000",
+    receipt, sealed = produce(bundle, store, trusted_voters=anchor, amount="1",
                               sign=lambda digest: {"sig_b64": "AAAA", "algorithm": "falcon-1024"})
     assert sealed is not None
     assert "canonical_bytes_b64" in sealed and "signature" in sealed
     assert receipt.trust_root == "stake_attested"
+
+
+def test_produce_refuses_an_amount_the_transaction_did_not_move(bundle, anchor, tmp_path):
+    """The core #1 finding: the fixture moved 1 microalgo. A receipt asserting
+    1,000,000 must be refused, not published.
+
+    Guard evidence: delete the verify_settlement_amount() call in produce() and
+    this test goes green with a false 1,000,000-microalgo receipt issued -- which
+    is exactly the defect. Restored, produce() refuses here and issues nothing.
+    """
+    store = Store(tmp_path)
+    with pytest.raises(MeshError, match="does not match the on-chain transfer"):
+        produce(bundle, store, trusted_voters=anchor, amount="1000000")
+    # Nothing false was persisted: the receipt for this transaction was refused
+    # before put_receipt, so it is absent from the store.
+    with pytest.raises(FileNotFoundError):
+        store.get_receipt(bundle["transaction"]["txid"])
 
 
 def test_produce_refuses_evidence_that_cannot_reach_the_tier(bundle, tmp_path):

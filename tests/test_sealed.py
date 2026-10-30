@@ -25,13 +25,17 @@ def _resolver(b):
     return lambda uri: copy.deepcopy(b)
 
 
-def _content(bundle):
+def _content(bundle, amount="1"):
+    # The canonical settlement schema the producer writes (see
+    # produce.settlement_from_bundle): amount is a base-unit string, asset names
+    # the unit. The fixture is a 1-microalgo payment, so the truthful amount is
+    # "1"; the binding test below shows any other figure is refused.
     return {
         "settlement": {
-            "chain": "mainnet-v1.0",
-            "txid": bundle["transaction"]["txid"],
+            "chain_txid": bundle["transaction"]["txid"],
             "round": bundle["transaction"]["round"],
-            "amount_microalgo": 1,
+            "amount": amount,
+            "asset": "microalgo",
         },
         "issuer": "AlgoVoi",
     }
@@ -51,6 +55,24 @@ def test_sealed_receipt_verifies_end_to_end(bundle, anchor):
     assert out["trust_root"] == "stake_attested"
     assert out["levels"]["integrity"] is True
     assert out["levels"]["consensus"] == "stake_attested"
+    # The 1-microalgo amount is bound to the authenticated transaction.
+    assert out["levels"]["amount"] == "bound"
+
+
+def test_sealed_receipt_with_a_false_amount_is_refused(bundle, anchor):
+    """Verifier-side #1 close: a sealed receipt is honestly integrity- and
+    consensus-sound, but states an amount the transaction never moved. verify_sealed
+    must refuse it rather than return a stake_attested verdict beside a false figure.
+
+    Guard evidence: remove the verify_settlement_amount() call in verify_sealed()
+    and this returns trust_root 'stake_attested' with amount 1,000,000 accepted --
+    the defect. Restored, it raises here.
+    """
+    sealed = seal(_content(bundle, amount="1000000"), bundle, "file://proofpack.json",
+                  trusted_voters=anchor)
+    with pytest.raises(MeshError, match="does not match the on-chain transfer"):
+        verify_sealed(sealed, _resolver(bundle), trusted_voters=anchor,
+                      expected_genesis_hash_b64=GENESIS)
 
 
 def test_tampering_the_attestation_breaks_integrity(bundle, anchor):
@@ -85,6 +107,9 @@ def test_receipt_without_attestation_is_structural_not_attested(bundle, anchor):
     out = verify_sealed(sealed, _resolver(bundle), trusted_voters=anchor, expected_genesis_hash_b64=GENESIS)
     assert out["trust_root"] == "structural"
     assert out["levels"]["consensus"] == "absent"
+    # No attestation means no authenticated transaction to bind against, so the
+    # amount is reported present-but-unbound rather than silently trusted.
+    assert out["levels"]["amount"] == "present-unbound"
 
 
 def test_seal_refuses_double_attestation(bundle, anchor):

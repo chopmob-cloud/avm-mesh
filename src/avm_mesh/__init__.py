@@ -5,6 +5,7 @@ a pointer to a proofpack, and the trust tier that proofpack actually earned.
 The bundle itself is stored once per attested interval, never per transaction.
 """
 from .attestation import ConsensusAttestation, attest, verify_attestation
+from .effects import verify_settlement_amount
 from . import a2a, produce, service, trust
 from .produce import produce as produce_receipt
 from .service import Store, WitnessInfo
@@ -34,6 +35,7 @@ __all__ = [
     "ConsensusAttestation",
     "attest",
     "verify_attestation",
+    "verify_settlement_amount",
     "MeshError",
     "ProofpackPointer",
     "SettlementReceipt",

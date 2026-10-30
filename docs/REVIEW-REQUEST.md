@@ -48,11 +48,21 @@ deliberate separation — evidence is a fact, an invoice is an interpretation �
 must not be read as evidence of an amount**. My view: this needs either a hard prohibition on the field
 or a verification path through `avm-effectproof`. Convince me which.
 
-### 2. LEVEL 2 has never seen a real key
+### 2. LEVEL 2: the primitive is proven; an operator-signed receipt end to end is not
 
-`sealed.verify_sealed` accepts `verify_signature` as an injected callable, and every test passes a stub
-(`lambda cb, sig: True`). The `pqcrypto` call path in `cli._make_signature_verifier` has never been
-executed against a genuine Falcon-1024 key and signature. I expect this to work; I have not shown it.
+This was originally stated as "LEVEL 2 has never seen a real key". That overstates the gap as the code
+now stands, and is corrected here. `cli._make_signature_verifier` no longer calls `pqcrypto` at all --
+it uses `avm_proofpack.consensus.falcon.falcon1024_verify` (stdlib-only; `pqcrypto` 1.0.0 dropped Falcon).
+`tests/test_level2_real_falcon.py` exercises that primitive against **genuine Falcon-1024 KAT vectors**
+(real keys and signatures, not stubs), proves rejection under a changed message and a different key, and
+proves the plumbing by substitution (the verifier is replaced with a recorder, so the test fails if the
+code stops hashing what it claims to hash or stops checking the returned bool).
+
+What is still *not* shown, and is recorded as such: an operator generating their own Falcon-1024 key and
+signing a freshly produced receipt, verified end to end. No Falcon-1024 *signer* is installable in this
+environment, so that belongs in an operator's acceptance test. `sealed.verify_sealed` still accepts an
+injected `verify_signature`, which is correct -- the verifier's job is to check a signature, not to own a
+signing toolchain -- but it means the signer side of LEVEL 2 is unexercised here by design, not by stub.
 
 ### 3. `trust.py` is an unsigned root of trust
 
@@ -93,3 +103,18 @@ has had more false *claims* than defective *code*.
 `Signed-off-by: AlgoVoi <chopmob@gmail.com>`. If you fix something, please also add the mutation result
 to the commit — "guard disabled → N failed; restored → M passed" — because a guard with no evidence it
 bites is what this review is meant to catch.
+
+## Addendum — review response (branch `fix/bind-settlement-amount-effectproof`, 2026-10-30)
+
+This branch acts on the review above; the counts in the sections before it describe the pre-review state.
+
+- **Finding #1 (settlement amount) is closed.** The stated amount is now bound to the authenticated STIB
+  via `avm-effectproof` in both `produce()` and `verify_sealed()` (new `avm_mesh.effects`), fail-closed on
+  close-remainder or any shape that is not an unambiguous `pay`/`axfer`. Guards proven by mutation
+  (produce: 1 failed → restored 5 passed; verify_sealed: 1 failed → restored 10 passed) and validated by
+  Codex on the running code.
+- **Suite is now 202 tests** (two added for the binding): **202 passed, 0 skipped** in the Linux clean
+  room; 201 passed + 1 skipped on a Windows host, where the symlink-refusal test cannot plant a symlink.
+- **New dependency `avm-effectproof>=0.1.1`** — stage its wheel in the clean room alongside `avm-proofpack`.
+- Findings #3 (`trust.py`) and #5 (`service.py`) remain accept-and-document design decisions; #4 (`bond.py`
+  on-chain verification) is addressed as a docstring-truth fix pending the Track 3 escrow check.

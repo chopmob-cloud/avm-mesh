@@ -8,7 +8,15 @@ a false or withholding attestation cost money.
 
 TWO DISTINCT CLAIMS, kept apart on purpose:
 
-  bond      -- economic stake that can be slashed. Verifiable on-chain.
+  bond      -- an economic stake that can be slashed. IMPORTANT: this module
+               reasons over DECLARED bond values (escrow_txid, bond_microalgo,
+               active); it does NOT read the chain. "bonded" here means "claims
+               a stake at or above the floor", not "a stake proven on-chain to
+               exist, be unspent and be active". On-chain verification of the
+               escrow is deliberately out of scope (Track 3, decisions pending),
+               so until it lands everything downstream of a bond is a model, not
+               a guarantee. The economic argument below is the design intent, not
+               something this code enforces.
   operator  -- who runs the witness. NOT a trust source; only used to decide
                independence, because two endpoints of one operator are one
                witness wearing two hats.
@@ -108,10 +116,12 @@ class WitnessSet:
         return got[:threshold]
 
     def slashable_stake(self, chain: str) -> int:
-        """Total microalgo a false attestation could put at risk.
+        """Total DECLARED microalgo a false attestation could put at risk.
 
         Counted over independent operators only, because that is the amount
-        that could actually be taken for one lie.
+        that could actually be taken for one lie. This is arithmetic over the
+        declared bond figures, not a chain-verified sum: it is only as real as
+        the bonds themselves, which this module does not verify on-chain.
         """
         return sum(w.bond_microalgo for w in self.independent_corroborators(chain))
 

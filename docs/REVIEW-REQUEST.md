@@ -1,4 +1,4 @@
-# Independent review request — avm-mesh 0.4.1 (`c37aa9e`)
+# Independent review request — avm-mesh 0.4.2 (`9bfda93`)
 
 What I want from you is **adversarial review of running code**, not a read-through. Every real defect in
 this estate so far was found by attacking it — five by you in `avm-proofpack`, two by me attacking
@@ -11,7 +11,7 @@ git clone https://github.com/chopmob-cloud/avm-mesh && cd avm-mesh
 pip install avm-proofpack==0.4.1   # or: pip install -e ../avm-proofpack @ c97dcc3
 pip install -e . && pip install pytest
 
-python -m pytest tests/ -q                     # expect 221 passed, 0 skipped
+python -m pytest tests/ -q                     # expect 226 passed, 0 skipped
 python tools/audit_trust_boundary.py           # expect rule A OK; B/C/D advisory
 python tools/red_team.py --fixture <bundle>.json.gz   # expect RED TEAM CLEAN
 ```
@@ -26,7 +26,7 @@ looked green.
 
 ## What has already been proven, so you can skip it
 
-- **221 tests, 0 skipped**, clean-room validated against the installed wheel, not the source tree.
+- **226 tests, 0 skipped**, clean-room validated against the installed wheel, not the source tree.
 - **14 red-team attacks refused**, positive control first: path traversal, digest substitution, tier
   upgrade, anchor mismatch, genesis pin for another chain, interval shift, txid reuse, receipt rewriting.
 - **Guards proven load-bearing by mutation**: disabling the attested-interval binding turns

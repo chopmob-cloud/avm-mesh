@@ -76,8 +76,14 @@ class Store:
         self.root = pathlib.Path(root)
         self.proofpacks = self.root / "proofpacks"
         self.receipts = self.root / "receipts"
-        self.proofpacks.mkdir(parents=True, exist_ok=True)
-        self.receipts.mkdir(parents=True, exist_ok=True)
+        # Wrap filesystem failures in the module's own error type. Callers are told
+        # never to expect TypeError/OSError from this package, and a path that is a
+        # file rather than a directory is a configuration error, not a crash.
+        try:
+            self.proofpacks.mkdir(parents=True, exist_ok=True)
+            self.receipts.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            raise MeshError(f"store root {self.root} is unusable: {exc.strerror or exc}") from exc
 
     # -- writes ---------------------------------------------------------
     def put_proofpack(self, bundle: dict) -> str:

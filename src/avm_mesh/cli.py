@@ -60,7 +60,58 @@ def _make_signature_verifier(pubkey_b64: str):
     return verify
 
 
-def main(argv: list[str] | None = None) -> int:
+def _serve(args) -> int:
+    """Run the witness service until interrupted.
+
+    The witness card is published only when every field it needs is supplied. A
+    partial card would advertise an anchor the witness does not hold, so a
+    half-specified witness serves the store and says so rather than guessing.
+    """
+    from .service import Store, WitnessInfo, serve_forever
+
+    try:
+        store = Store(args.root)
+    except MeshError as exc:
+        print(f"cannot open store at {args.root}: {exc}", file=sys.stderr)
+        return 3
+
+    card_fields = {
+        "witness_id": args.witness_id,
+        "operator_id": args.operator_id,
+        "chain": args.chain,
+        "escrow_txid": args.escrow_txid,
+        "anchor_voters_commitment_b64": args.anchor_voters_commitment_b64,
+        "anchor_ln_proven_weight": args.anchor_ln_proven_weight,
+    }
+    supplied = [k for k, v in card_fields.items() if v is not None]
+    info = None
+    if supplied and len(supplied) != len(card_fields):
+        # Fail closed. Starting a witness whose identity is half-configured is how
+        # an operator ends up attesting under a card that is not what they meant;
+        # the error is cheap here and expensive later.
+        missing = sorted(set(card_fields) - set(supplied))
+        print(f"incomplete witness card: missing {', '.join(missing)}", file=sys.stderr)
+        return 3
+    elif supplied:
+        try:
+            info = WitnessInfo(**card_fields)
+        except MeshError as exc:
+            print(f"invalid witness card: {exc}", file=sys.stderr)
+            return 3
+
+    print(f"serving store {args.root} on http://{args.host}:{args.port}", file=sys.stderr)
+    try:
+        serve_forever(store, host=args.host, port=args.port, info=info)
+    except OSError as exc:
+        print(f"cannot bind {args.host}:{args.port}: {exc}", file=sys.stderr)
+        return 3
+    except KeyboardInterrupt:
+        return 0
+    return 0
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    """The one place the CLI is defined, so tests can inspect it without running it."""
     parser = argparse.ArgumentParser(prog="avm-mesh")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
@@ -77,7 +128,25 @@ def main(argv: list[str] | None = None) -> int:
                    help="operator Falcon-1024 public key, to check LEVEL 2")
     v.add_argument("--json", action="store_true", help="machine-readable output")
 
+    s = sub.add_parser("serve", help="run a witness service over a content-addressed store")
+    s.add_argument("--root", required=True, help="directory holding the store")
+    s.add_argument("--host", default="127.0.0.1")
+    s.add_argument("--port", type=int, default=8080)
+    s.add_argument("--witness-id", default=None)
+    s.add_argument("--operator-id", default=None)
+    s.add_argument("--chain", default=None)
+    s.add_argument("--escrow-txid", default=None)
+    s.add_argument("--anchor-voters-commitment-b64", default=None)
+    s.add_argument("--anchor-ln-proven-weight", type=int, default=None)
+
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = _build_parser()
     args = parser.parse_args(argv)
+    if args.cmd == "serve":
+        return _serve(args)
     if args.cmd != "verify":
         parser.print_help()
         return 3

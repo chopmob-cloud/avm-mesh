@@ -36,6 +36,12 @@ for wheel in "$ART"/avm_mesh-*.whl "$ART"/avm_proofpack-*.whl; do
     [ -f "$wheel" ] || { echo "MISSING $wheel"; FAILED=1; }
 done
 [ -f "$FIXTURE" ] || { echo "MISSING $FIXTURE"; FAILED=1; }
+# README.md is a packaging input now: tests/test_packaging.py derives the command
+# list from it, and pyproject declares it as the distribution's long description.
+# A stage without it is incomplete, and the suite says so -- but fail here where
+# the reason is obvious.
+[ -f "$SRC/README.md" ] || { echo "MISSING $SRC/README.md"; FAILED=1; }
+[ -f "$SRC/pyproject.toml" ] || { echo "MISSING $SRC/pyproject.toml"; FAILED=1; }
 ls "$ART" >/dev/null 2>&1; verdict $? "artefacts staged"
 [ "$FAILED" -eq 0 ] || { echo "ABORT: install would be meaningless"; exit 1; }
 

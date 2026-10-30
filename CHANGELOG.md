@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.4.3
+
+### Fixed — the documented `avm-mesh` command did not exist
+
+`README.md` documents `avm-mesh verify` and `avm-mesh serve`. `pyproject.toml` defined no console script, so
+**every PyPI install got `avm-mesh: command not found`**. The package worked via `python -m avm_mesh`, which
+is what the changelog and the E2E tests used, so nothing caught it.
+
+Added `[project.scripts] avm-mesh = "avm_mesh.cli:main"`.
+
+### Fixed — `avm-mesh serve` was documented and not implemented
+
+The same README documents `avm-mesh serve --root ./store --port 8080 ...`. The CLI parsed only `verify`,
+so the command exited with an argparse error. `serve` is now implemented over `service.Store` /
+`WitnessInfo` / `serve_forever`, with the documented flags.
+
+An incomplete witness card **fails closed**: supplying some identity fields and not others exits 3 rather
+than starting a witness whose published card is not what the operator configured. Serving without any card
+remains valid (a plain store node).
+
+`Store()` also wrapped filesystem failures in `MeshError` instead of letting `FileExistsError` escape —
+a path that is a file rather than a directory is a configuration error, not a traceback, and the package
+promises never to leak `OSError` to callers.
+
+### Guarding it
+
+`tests/test_packaging.py` derives the command list from the README and asserts each one exists on the
+parser, and asserts `[project.scripts]` names a real callable. `tests/test_serve_cli.py` parses the exact
+README invocation, checks the documented flags, and pins the fail-closed behaviour. Every earlier test
+imported the module, which is precisely why none of them noticed.
+
+### Why 0.4.2 shipped it
+
+Because publication is the first time the package is used the way the README says it should be. No test in
+the repo invokes the console script — they import the module. A test that shells out to `avm-mesh --help`
+would have caught it, and one now does.
+
 ## 0.4.2
 
 ### Fixed — the A2A artifact used a wire format v1.0 removed

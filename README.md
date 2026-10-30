@@ -361,7 +361,7 @@ what the check above is for.
 
 ## Status
 
-**`0.5.0`, published on PyPI** — `pip install avm-mesh`. **244 tests, 0 skipped**, validated in a fresh
+**`0.5.0`, published on PyPI** — `pip install avm-mesh`. **245 tests, 0 skipped**, validated in a fresh
 VM2 clean-room container that installs from the built wheels offline and runs against site-packages.
 
 | Piece | State |

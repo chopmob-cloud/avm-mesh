@@ -4,6 +4,8 @@ A receipt is what moves between meshes. It is deliberately small: a digest,
 a pointer to a proofpack, and the trust tier that proofpack actually earned.
 The bundle itself is stored once per attested interval, never per transaction.
 """
+
+from .corroborate import Corroboration, collect
 from .attestation import ConsensusAttestation, attest, verify_attestation
 from .effects import verify_settlement_amount
 from . import a2a, rails, produce, service, trust
@@ -42,4 +44,4 @@ __all__ = [
     "create_receipt",
     "verify_receipt",
 ]
-__version__ = "0.4.3"
+__version__ = "0.5.0"

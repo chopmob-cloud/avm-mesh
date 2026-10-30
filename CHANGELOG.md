@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.5.0
+
+### Added — `avm-mesh corroborate`: the mesh actually checking itself
+
+Until now the mesh could serve a receipt and verify one. It could not answer the question the mesh exists
+for: *do independent operators agree?* `bond.py` held corroboration rules, but nothing went out to several
+witnesses and applied them.
+
+```sh
+avm-mesh corroborate --txid X --witness https://w1 --witness https://w2 --min-operators 2
+```
+
+Three refusals define the feature:
+
+1. **Endpoints are not operators.** Independence is counted over distinct `operator_id`s from each witness's
+   card. One operator behind two URLs is one voice — the cheapest fake mesh there is.
+2. **A pointer is a claim until the bytes are hashed.** For every witness the client fetches the proofpack
+   and recomputes its digest. A witness serving different bytes than it points at is not counted. (Our own
+   service refuses to serve tampered bytes at all — the store is content-addressed — so this check protects
+   against *other* implementations, and is tested against a stubbed dishonest peer.)
+3. **Disagreement is named, not averaged.** Different digests, rounds or tiers each fail with a reason.
+
+Exit codes 0/2/3, `--json` for machines. 15 tests, including three that drive the CLI as a subprocess
+against live in-process witnesses.
+
+### Note on our own service
+
+The tampered-store test initially failed because the service returns HTTP 500 rather than serving wrong
+bytes. That is the store doing its job one layer earlier than the client check; both behaviours are now
+pinned, and the client check is exercised separately so it does not go untested just because our own code
+is honest.
+
 ## 0.4.3
 
 ### Fixed — the documented `avm-mesh` command did not exist

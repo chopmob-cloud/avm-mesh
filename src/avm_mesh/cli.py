@@ -139,7 +139,47 @@ def _build_parser() -> argparse.ArgumentParser:
     s.add_argument("--anchor-voters-commitment-b64", default=None)
     s.add_argument("--anchor-ln-proven-weight", type=int, default=None)
 
+    c = sub.add_parser("corroborate",
+                       help="ask several witnesses for one receipt and check they agree")
+    c.add_argument("--txid", required=True)
+    c.add_argument("--witness", action="append", required=True, metavar="URL",
+                   help="witness base URL; repeat for each witness")
+    c.add_argument("--min-operators", type=int, default=2,
+                   help="independent operators required (default 2)")
+    c.add_argument("--timeout", type=float, default=5.0)
+    c.add_argument("--json", action="store_true")
+
     return parser
+
+
+def _corroborate(args) -> int:
+    """Collect from every witness and report agreement, or the reason there is none."""
+    from .corroborate import collect
+
+    try:
+        result = collect(args.txid, args.witness,
+                         min_operators=args.min_operators, timeout=args.timeout)
+    except MeshError as exc:
+        print(f"cannot corroborate: {exc}", file=sys.stderr)
+        return 3
+
+    if args.json:
+        print(json.dumps(result.to_dict(), indent=2))
+    else:
+        for view in result.views:
+            state = "COUNTED" if view.counts else "not counted"
+            detail = view.problem or f"tier={view.trust_root} round={view.round}"
+            print(f"  {view.url:<40} {state:<11} {detail}")
+        print(f"operators: {', '.join(result.operators) or 'none'} "
+              f"(need {result.min_operators})")
+        if result.agreed:
+            print(f"AGREED on proofpack {result.agreed_digest}")
+        else:
+            for problem in result.problems:
+                print(f"  ! {problem}")
+            print("NOT AGREED")
+
+    return 0 if result.agreed else 2
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -147,6 +187,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.cmd == "serve":
         return _serve(args)
+    if args.cmd == "corroborate":
+        return _corroborate(args)
     if args.cmd != "verify":
         parser.print_help()
         return 3

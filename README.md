@@ -8,6 +8,30 @@ position — **the node set is the interop layer**. A node on the source chain p
 because it already holds the full block. A node on the destination chain verifies that evidence because
 it *cannot* see those blocks. Nothing new needs to be trusted; the asymmetry is the protocol.
 
+## Install
+
+```sh
+pip install avm-mesh            # pulls avm-proofpack and avm-effectproof
+```
+
+Python 3.10+. No runtime dependencies beyond the AVM proofpack stack, and no service to reach: verification
+is offline.
+
+```pycon
+>>> from avm_mesh import verify_receipt
+>>> verify_receipt(receipt, resolve=storage.read, trusted_voters=anchor,
+...                expected_genesis_hash_b64=ALGORAND_MAINNET)["trust_root"]
+'stake_attested'
+```
+
+Three commands ship with it:
+
+| Command | What it does |
+|---|---|
+| `avm-mesh verify` | offline verification of one receipt, reporting each level separately |
+| `avm-mesh serve` | run a witness over a content-addressed store |
+| `avm-mesh corroborate` | ask several witnesses for one receipt and check they agree |
+
 ## The problem with what exists
 
 Every other cross-chain message answers "who says this happened?" with "us". Wormhole says the
@@ -98,7 +122,7 @@ provides a Falcon verifier. Why, what replaces it, and what remains unproven:
 | `trust` | one auditable policy holding every pin |
 | `bond` | witness bonds and enforced independence |
 | `a2a` | settlement-evidence extension |
-| `cli` | offline verifier, `avm-mesh verify` / `avm-mesh serve` |
+| `cli` | offline verifier, `avm-mesh verify` / `avm-mesh serve` / `avm-mesh corroborate` |
 
 A deployment needs two things to be safe: an **anchor** it obtained itself, and a **policy** that pins
 chain, genesis hash, anchor and witness set in one document. Everything else is mechanism.
@@ -171,7 +195,7 @@ LEVEL 2.
 ## Seal it and verify it from the command line
 
 ```sh
-python -m avm_mesh verify receipt.json --evidence ./proofpacks \
+avm-mesh verify receipt.json --evidence ./proofpacks \
     --genesis wGHE2Pwdvd7S12BL5FaOP20EGYesN73ktiC1qzkkit8= \
     --voters-commitment <trusted-voters-commitment-b64> \
     --ln-proven-weight <proven-weight>
@@ -193,6 +217,20 @@ self-declared field.
 
 Exit `0` verified, `2` failed, `3` usage. `--json` for machine output. A real receipt is **945 bytes**
 against an 854 KB proofpack; the proof is stored once per attested interval, not per payment.
+
+Run a witness over a store you control:
+
+```sh
+avm-mesh serve --root ./store --port 8080 \
+    --witness-id w1 --operator-id op-a --chain mainnet-v1.0 --escrow-txid ESCROW \
+    --anchor-voters-commitment-b64 <trusted-voters-commitment-b64> \
+    --anchor-ln-proven-weight <proven-weight>
+```
+
+The witness card is optional but all-or-nothing: supply some identity flags and not others and it refuses to
+start (exit 3) rather than publish a card that is not what you configured. A witness with no card at all
+serves the store and can never be counted toward corroboration, because an endpoint that will not say who
+operates it is not an independent voice.
 
 Sealing binds the attestation into the hashed bytes:
 
@@ -283,17 +321,67 @@ trustless:
 *"Here are the two chains where you get cryptographic proof and the five where you get someone's
 word"* is a stronger offer than claiming all seven are equal, because the merchant can check it.
 
+## Corroborating across witnesses
+
+A single witness is one operator's word. `avm-mesh corroborate` asks several and decides whether the mesh
+agrees:
+
+```sh
+avm-mesh corroborate --txid TH2WRFV... \
+  --witness https://w1.example.org \
+  --witness https://w2.example.net \
+  --min-operators 2
+```
+
+```
+  https://w1.example.org                   COUNTED     tier=stake_attested round=66457600
+  https://w2.example.net                   COUNTED     tier=stake_attested round=66457600
+operators: op-a, op-b (need 2)
+AGREED on proofpack 8f14e45fceea167a5a36dedd4bea2543...
+```
+
+Exit codes: `0` agreed, `2` not agreed, `3` bad arguments. `--json` emits the full report.
+
+What counts, and what deliberately does not:
+
+- **A witness counts only if it publishes an `operator_id`.** Two URLs on one operator are one voice, and
+  running an operator twice is the cheapest way to fake a mesh. Independence is counted over operators,
+  never over endpoints.
+- **The pointer is verified, not trusted.** For each witness the client fetches the proofpack and checks its
+  bytes hash to the digest the receipt names. A witness that points at good evidence while serving
+  something else is not counted.
+- **Disagreement is reported, never averaged.** Different proofpack digests, different rounds or different
+  trust tiers each make agreement fail with a named reason.
+- **An unreachable or broken witness is a reported view, not an exception.** One silent witness does not
+  crash the run, and it does not silently reduce the threshold either.
+
+Corroboration is recorded, not inferred: a receipt's `corroboration` list names the witnesses that returned
+it. It is a capture-time property and says nothing about whether those operators are independent — that is
+what the check above is for.
+
 ## Status
 
-`0.2.0` — producer path, witness service, trust policy, receipts, LEVEL 3 attestation, A2A extension.
-**85 tests**, validated in a VM2 clean-room.
+**`0.5.0`, published on PyPI** — `pip install avm-mesh`. **244 tests, 0 skipped**, validated in a fresh
+VM2 clean-room container that installs from the built wheels offline and runs against site-packages.
 
-**Dependency:** requires `avm-proofpack>=0.4.1` and is verified against **0.4.1 @ `02d2516`**, where the
-`stake_attested` tier became anchor-required. `avm-mesh` 0.1.x followed that fix: LEVEL 3 no longer
-authenticates from a bundle's own `previous_message`.
+| Piece | State |
+|---|---|
+| Receipts, three enforced properties, genesis pin | shipped |
+| Witness service (`serve`), content-addressed store, append-only receipts | shipped |
+| LEVEL 3 consensus attestation, anchor-required | shipped |
+| Corroboration across witnesses (`corroborate`) | shipped 0.5.0 |
+| A2A settlement-evidence extension (v1.0 wire format) | shipped; parsed by `a2a-sdk` 1.3.0 |
+| Rails adoption kit (`avm_mesh.rails`) | shipped; **not round-tripped** against a real rails receipt |
+| Witness bonding (`bond.py`) | model only — **no on-chain escrow**, see Honest limits |
 
-Not yet built: wiring LEVEL 3 into the rails bundle's own verifier (it currently lives here), the A2A
-settlement extension, and witness bonding.
+**Dependency:** `avm-proofpack>=0.4.1`, where `stake_attested` became anchor-required. LEVEL 3 never
+authenticates from a bundle's own `previous_message`, in any version after 0.1.0.
+
+**A2A conformance, precisely:** the TCK runs on this estate (183 passed / 5 failed / 47 skipped at `must`
+level against the reference SUT), but those five failures are the reference SUT's own and **no extension
+requirements exist in the TCK** (no `EXT-*` ids). So a green TCK run cannot validate extension semantics;
+what is proven is that our artifact parses in the reference SDK and that advertising the extension costs
+zero protocol conformance. See `docs/A2A-CONFORMANCE.md`.
 
 ## Honest limits
 
@@ -305,5 +393,13 @@ settlement extension, and witness bonding.
   minutes). Miss that window and the bundle falls back to `unattested`.
 - **Falcon verification is only as good as the genesis hash** you pin. Ship it in your application,
   not fetched over the wire.
+- **Bonding is a model, not a market.** `bond.py` enforces independence and threshold arithmetic over
+  witness records you supply; it does not read an escrow, and nothing is slashed by this library. On-chain
+  bonding needs four decisions we have not invented for you: asset, slash fraction, dispute window, arbiter.
+- **The rails adapter has never seen a real rails receipt.** The format and signing convention are pinned
+  by tests against the shipped verifier's source, but no receipt produced by that bundle has been verified
+  here. Treat 'drop-in' as unproven end to end until one is.
+- **LEVEL 2 end-to-end is unproven.** No Falcon-1024 *signer* is installable in this environment, so the
+  operator-signature path is tested by substitution and KAT vectors, not by an operator signing for real.
 
 Apache-2.0.

@@ -143,6 +143,15 @@ def main(argv=None) -> int:
 
     expect_refusal("evidence reused for another txid", reuse)
 
+    # ---- witness equivocation --------------------------------------------
+    def rewrite_receipt():
+        """The service swapping a receipt it already published."""
+        forged = SettlementReceipt.from_dict({**receipt.to_dict(),
+                                              "corroboration": ["w1", "w2"]})
+        store.put_receipt(forged)
+
+    expect_refusal("witness rewrites its own receipt", rewrite_receipt)
+
     # ---- policy chain -----------------------------------------------------
     def policy_chain():
         verify_with_policy(receipt, store.resolve,

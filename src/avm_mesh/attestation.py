@@ -214,6 +214,13 @@ def verify_attestation(attestation: ConsensusAttestation | dict,
         except Exception as exc:
             raise MeshError("expected genesis hash is not valid base64") from exc
 
+    # evidence_uri is a LOCATOR, not a security binding: it only tells the
+    # caller's resolver where to look. It is deliberately not checked against
+    # any verified value -- there is none to check it against -- because the
+    # integrity binding is the digest below. Whatever the URI points at, only a
+    # bundle hashing to evidence_digest passes, so the URI cannot substitute
+    # evidence. URI policy (which schemes/hosts are acceptable) belongs to the
+    # resolver the caller supplies.
     try:
         bundle = resolve(attestation.evidence_uri)
     except MeshError:

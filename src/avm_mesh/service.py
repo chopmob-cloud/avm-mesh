@@ -34,9 +34,18 @@ from .receipt import MeshError, SettlementReceipt, bundle_digest
 _SAFE_NAME = re.compile(r"\A[A-Za-z0-9_-]{1,128}\Z")
 
 
+class StoreNameError(MeshError):
+    """A requested store name is malformed: a client error, not corruption.
+
+    Kept distinct from a plain MeshError so the HTTP layer can answer a bad
+    name with 404 (we have no such resource) rather than 500 (a fault on our
+    side), while every ``except MeshError`` still catches it.
+    """
+
+
 def _safe_name(value: str, kind: str) -> str:
     if not isinstance(value, str) or not _SAFE_NAME.match(value):
-        raise MeshError(f"{kind} is not a valid store name")
+        raise StoreNameError(f"{kind} is not a valid store name")
     return value
 
 
@@ -50,14 +59,14 @@ def _within_store(base: pathlib.Path, path: pathlib.Path) -> None:
     resolved path still sits directly in the store directory.
     """
     if path.is_symlink():
-        raise MeshError("refusing to serve a symlinked store entry")
+        raise StoreNameError("refusing to serve a symlinked store entry")
     try:
         resolved = path.resolve()
         root = base.resolve()
     except OSError as exc:
         raise MeshError("could not resolve store path") from exc
     if resolved.parent != root:
-        raise MeshError("store entry escapes the store root")
+        raise StoreNameError("store entry escapes the store root")
 
 
 class Store:
@@ -198,6 +207,11 @@ def _make_handler(store: Store, info: WitnessInfo | None):
                         digest = digest[:-5]
                     return self._json(200, store.get_proofpack(digest))
             except FileNotFoundError:
+                return self._json(404, {"error": "not found"})
+            except StoreNameError:
+                # A malformed name is a client error: we have no such resource.
+                # Answer 404 rather than leaking that it was rejected (and never
+                # 500, which would imply a fault on our side).
                 return self._json(404, {"error": "not found"})
             except MeshError as exc:
                 # A stored artefact that no longer matches its name is a fault on

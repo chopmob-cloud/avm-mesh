@@ -156,7 +156,7 @@ class WitnessInfo:
         for name, value in (("witness_id", witness_id), ("operator_id", operator_id),
                             ("chain", chain), ("escrow_txid", escrow_txid)):
             if not isinstance(value, str) or not value:
-                raise MeshError(f"{name} is required")
+                raise MeshError(f"{name} must be a non-empty string")
         self.witness_id = witness_id
         self.operator_id = operator_id
         self.chain = chain

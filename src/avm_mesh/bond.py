@@ -38,16 +38,18 @@ class Witness:
     active: bool = True
 
     def __post_init__(self) -> None:
-        if not self.witness_id:
-            raise BondError("witness_id is required")
-        if not self.operator_id:
-            # An unnamed operator would silently become its own identity and
-            # defeat the independence check below.
-            raise BondError("operator_id is required")
+        # Type, not truthiness: 42 is truthy and would become a "witness id" that
+        # no other record could ever match.
+        for name, value in (("witness_id", self.witness_id),
+                            ("operator_id", self.operator_id),
+                            ("chain", self.chain),
+                            ("escrow_txid", self.escrow_txid)):
+            if not isinstance(value, str) or not value:
+                raise BondError(f"{name} must be a non-empty string")
+        if not isinstance(self.bond_microalgo, int) or isinstance(self.bond_microalgo, bool):
+            raise BondError("bond_microalgo must be an integer")
         if self.bond_microalgo < 0:
             raise BondError("bond cannot be negative")
-        if not self.escrow_txid:
-            raise BondError("escrow_txid is required: an unverifiable bond is not a bond")
 
     @property
     def bonded(self) -> bool:

@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.2.1
+
+### Fixed
+
+- **`Witness` and `WitnessInfo` accepted non-string identities.** The guards tested truthiness, so
+  `Witness(42, ...)` and `Witness("a string", ...)` were valid records: an id no other record could ever
+  match, and a bond amount that was not a number. Both now require a non-empty `str`, and
+  `bond_microalgo` must be an integer (`bool` excluded).
+
+### Added
+
+- **95 fail-closed tests.** Every public entry point is fed `None`, numbers, strings, bytes, lists,
+  mappings and booleans, and must raise `MeshError`/`BondError` — never `TypeError`, `AttributeError` or
+  `KeyError`. An unexpected exception type is what a caller's `except Exception` swallows into a pass, so
+  the *type* of the refusal is part of the contract.
+- **`tools/red_team.py`** — attempts the forgeries a real adversary would try (path traversal, digest
+  swap, tier upgrade, anchor mismatch, wrong genesis, interval shift, transaction reuse, policy chain)
+  against the **installed** package. A positive control runs first: if honest evidence fails to verify,
+  the run aborts rather than reporting vacuous refusals.
+
+### Notes
+
+- 189 tests. Rule D of the audit still reports ~95 advisories: it measures whether refusal *messages*
+  are pinned by `match=`, and these tests assert behaviour without pinning prose. That metric is a weaker
+  proxy than the property the tests actually establish, and is recorded as such rather than inflated by
+  adding string matches.
+
 ## 0.2.0
 
 The framework becomes complete: a settler can publish, a witness can serve, and a merchant can verify

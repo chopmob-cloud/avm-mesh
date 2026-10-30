@@ -100,7 +100,7 @@ def test_service_endpoint_does_not_serve_files_outside_the_store(store_dir, tmp_
 
 
 def test_witness_info_requires_identity(store_dir):
-    with pytest.raises(MeshError, match="operator_id is required"):
+    with pytest.raises(MeshError, match="operator_id must be a non-empty string"):
         WitnessInfo("w1", "", "mainnet-v1.0", "ESC", "", 0)
 
 

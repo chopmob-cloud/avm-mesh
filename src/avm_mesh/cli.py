@@ -30,10 +30,19 @@ def _file_resolver(root: pathlib.Path):
 def _make_signature_verifier(pubkey_b64: str):
     """LEVEL 2: the operator's Falcon-1024 signature over the content hash.
 
-    pqcrypto.verify RETURNS a bool rather than raising, so the return value must
-    be checked -- an unchecked call reads as success for any signature.
+    Uses avm_proofpack's own verifier rather than `pqcrypto`. Two reasons: it is
+    stdlib-only, so LEVEL 2 needs no third-party package in the trust base; and
+    `pqcrypto` 1.0.0 no longer ships Falcon at all (its sign subpackage lists
+    ML-KEM, ML-DSA, SLH-DSA, McEliece, HQC and SNTRUP), so the previously
+    documented `pip install pqcrypto` path now fails on import.
+
+    ``falcon1024_verify`` returns a bool rather than raising, so the return value
+    must be checked -- an unchecked call reads as success for any signature.
     """
     import base64 as _b64
+    import hashlib as _h
+
+    from avm_proofpack.consensus.falcon import falcon1024_verify
 
     try:
         pubkey = _b64.b64decode(pubkey_b64, validate=True)
@@ -41,21 +50,12 @@ def _make_signature_verifier(pubkey_b64: str):
         raise ValueError("operator public key is not valid base64") from exc
 
     def verify(content_bytes: bytes, signature: dict) -> bool:
-        try:
-            from pqcrypto.sign.falcon_1024 import verify as falcon_verify
-        except Exception as exc:  # pragma: no cover - depends on install
-            raise RuntimeError(
-                "pqcrypto is required to check LEVEL 2: pip install pqcrypto"
-            ) from exc
         if not isinstance(signature, dict) or "sig_b64" not in signature:
             raise ValueError("signature object has no sig_b64")
         sig = _b64.b64decode(signature["sig_b64"], validate=True)
-        # The rails receipt signs the content HASH, not the bytes. Pass the bytes
-        # and let the caller compare; here we hash to match the sealed format.
-        import hashlib as _h
-
+        # The rails receipt signs the content HASH, not the bytes.
         digest = _h.sha256(content_bytes).digest()
-        return bool(falcon_verify(pubkey, digest, sig))
+        return bool(falcon1024_verify(pubkey, digest, sig))
 
     return verify
 

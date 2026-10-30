@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.4.1
+
+### Fixed — 0.4.0's rails verifier was not compatible with real rails receipts
+
+Reading the shipped `verify_settlement_receipt.py` line by line showed four differences. The first would
+have rejected every genuine receipt:
+
+1. **Signature payload.** The rails sign `sha256(canonical_bytes).hexdigest().encode("utf-8")` — 64 ASCII
+   bytes — not the raw 32-byte digest. 0.4.0 signed the raw digest.
+2. **Embedded key.** Receipts carry `public_key_b64`. Now supported, and reported as `"self-asserted"`
+   unless the caller pins a key: whoever writes the receipt chooses the key, so verifying against it proves
+   internal consistency, not the operator's identity. A pinned key that disagrees with the embedded one is
+   refused.
+3. **Exit codes.** The rails use 0 / 1 / 2; the CLI uses 0 / 2 / 3. `python -m avm_mesh.rails` now
+   translates, so an existing script does not read a failed verification as a usage error.
+4. **Field names** (`settlement.tx_id`, `amount_microunits`, `issuer_did`, `signature.kid/alg`) documented,
+   with `content` returned decoded rather than renamed.
+
+18 tests, including one that captures the exact payload bytes the signature is checked over — the
+convention that, got wrong, yields a verifier that passes its own tests and rejects every real receipt.
+
+### Lesson
+
+This is what "not round-tripped against a genuine receipt" cost. The shape was compatible; the cryptography
+was not. Reading the consumer's source is not optional when claiming drop-in compatibility.
+
 ## 0.4.0
 
 ### Added — the rails adoption kit (`avm_mesh.rails`)

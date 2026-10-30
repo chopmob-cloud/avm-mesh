@@ -205,3 +205,89 @@ def test_module_entry_point_delegates_to_the_cli(tmp_path, capsys):
     )
     assert proc.returncode == 0, proc.stderr
     assert "structural" in proc.stdout
+
+
+# --- drop-in compatibility with the shipped rails verifier ----------------
+
+def test_signature_payload_is_the_hex_digest_not_the_raw_bytes(monkeypatch):
+    """The rails sign sha256(cb).hexdigest().encode("utf-8").
+
+    Getting this wrong yields a verifier that rejects every genuine receipt while
+    passing its own tests, so the convention is pinned by capturing the payload
+    the primitive is handed.
+    """
+    import avm_proofpack.consensus.falcon as falcon
+    from avm_mesh.rails.verifier import _operator_verifier
+
+    seen = {}
+
+    def recorder(pubkey, message, signature):
+        seen["message"] = message
+        return True
+
+    monkeypatch.setattr(falcon, "falcon1024_verify", recorder)
+    verifier = _operator_verifier(base64.b64encode(bytes(range(32))).decode())
+    content = b'{"settlement":{"tx_id":"X"}}'
+    assert verifier(content, {"sig_b64": base64.b64encode(b"s").decode()}) is True
+
+    assert seen["message"] == hashlib.sha256(content).hexdigest().encode("utf-8")
+    assert seen["message"] != hashlib.sha256(content).digest()
+    assert len(seen["message"]) == 64  # ASCII hex, not 32 raw bytes
+
+
+def test_embedded_key_without_a_pin_is_self_asserted(monkeypatch):
+    """The receipt names its own key: that is consistency, not identity."""
+    import avm_proofpack.consensus.falcon as falcon
+
+    monkeypatch.setattr(falcon, "falcon1024_verify", lambda *a: True)
+    key = base64.b64encode(bytes(range(32))).decode()
+    receipt = _seal({"settlement": {"tx_id": "X"}})
+    receipt["public_key_b64"] = key
+    receipt["signature"] = {"sig_b64": base64.b64encode(b"sig").decode(), "alg": "Falcon-1024"}
+
+    out = verify_rails_receipt(receipt, resolve=lambda uri: {})
+    assert out["levels"]["signature"] == "self-asserted"
+    assert out["trust_root"] == "structural"
+
+
+def test_pinned_key_matching_the_embedded_one_is_valid(monkeypatch):
+    import avm_proofpack.consensus.falcon as falcon
+
+    monkeypatch.setattr(falcon, "falcon1024_verify", lambda *a: True)
+    key = base64.b64encode(bytes(range(32))).decode()
+    receipt = _seal({"settlement": {"tx_id": "X"}})
+    receipt["public_key_b64"] = key
+    receipt["signature"] = {"sig_b64": base64.b64encode(b"sig").decode()}
+
+    out = verify_rails_receipt(receipt, resolve=lambda uri: {}, operator_pubkey_b64=key)
+    assert out["levels"]["signature"] == "valid"
+
+
+def test_pinned_key_disagreeing_with_the_receipt_is_refused():
+    """A receipt may not name a key different from the one you pinned."""
+    key = base64.b64encode(bytes(range(32))).decode()
+    other = base64.b64encode(bytes(range(32, 64))).decode()
+    receipt = _seal({"settlement": {"tx_id": "X"}})
+    receipt["public_key_b64"] = other
+    receipt["signature"] = {"sig_b64": base64.b64encode(b"sig").decode()}
+
+    with pytest.raises(MeshError, match="operator key mismatch"):
+        verify_rails_receipt(receipt, resolve=lambda uri: {}, operator_pubkey_b64=key)
+
+
+def test_exit_codes_match_the_rails_tool(tmp_path):
+    """rails: 0 verified, 1 not verified, 2 usage. Not the CLI's 0/2/3."""
+    import subprocess, sys
+
+    bad = tmp_path / "bad.json"
+    bad.write_text(json.dumps({"canonical_bytes_b64": "!!!", "content_hash": "0" * 64}),
+                   encoding="utf-8")
+    proc = subprocess.run([sys.executable, "-m", "avm_mesh.rails", "verify", str(bad)],
+                          capture_output=True, text=True)
+    assert proc.returncode == 1, f"expected 1 (not verified), got {proc.returncode}"
+
+    good = tmp_path / "good.json"
+    good.write_text(json.dumps(_seal({"settlement": {"tx_id": "X"}})), encoding="utf-8")
+    proc = subprocess.run([sys.executable, "-m", "avm_mesh.rails", "verify", str(good)],
+                          capture_output=True, text=True)
+    assert proc.returncode == 0

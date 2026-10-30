@@ -88,9 +88,46 @@ alongside it.
 Alternative if that is unacceptable for a given customer: keep LEVEL 2 only, pin `pqcrypto<1.0`, and accept
 that PQClean receives no further security fixes. That is a real option, not a rhetorical one.
 
+## Exact compatibility notes (read these before swapping)
+
+These came from reading the shipped `verify_settlement_receipt.py` line by line. Each one, got wrong,
+produces a verifier that passes its own tests and rejects every genuine receipt.
+
+**1. The signature payload is the hex digest, encoded UTF-8.**
+
+```python
+# what the rails actually do
+falcon_verify(pk, hashlib.sha256(cb).hexdigest().encode("utf-8"), sig)   # 64 ASCII bytes
+# NOT the raw digest
+falcon_verify(pk, hashlib.sha256(cb).digest(), sig)                      # 32 bytes -- wrong
+```
+
+**2. The receipt embeds the operator's public key** in `public_key_b64`. That is useful for offline
+verification and dangerous as a trust signal: whoever writes the receipt chooses the key, so verifying
+against it proves internal consistency, not identity. This kit therefore reports three distinct states:
+
+| Situation | `levels.signature` |
+|---|---|
+| a key you pinned, matching the embedded one | `"valid"` |
+| only the embedded key | `"self-asserted"` |
+| no key available at all | `"present-unverified"` |
+| pinned key differs from the embedded one | refused — `MeshError` |
+
+**3. Exit codes are 0 / 1 / 2, not 0 / 2 / 3.** The shared CLI uses 0 verified, 2 failed, 3 usage; the
+rails tool uses 1 for a failed verification. `python -m avm_mesh.rails` translates them, so an operator's
+existing scripts do not read a failed verification as a usage error.
+
+**4. Field names differ from ours.** The rails carry `settlement.tx_id`, `settlement.chain`,
+`settlement.asset_id`, `settlement.amount_microunits`, `issuer_did`, and `signature.kid` / `signature.alg`.
+This kit verifies the envelope (`canonical_bytes_b64`, `content_hash`, `public_key_b64`, `signature`) and
+returns `content` decoded, so settlement fields come from `result["content"]["settlement"]` — no renaming
+is done for you.
+
 ## What is not proven, and must not be implied
 
-- **This kit has not been round-tripped against a genuine rails receipt.** The rails source tree is not
+- **This kit has not been round-tripped against a genuine rails receipt.** The format and the signing
+  convention are now pinned by tests (including a test that captures the exact payload bytes the signature
+  is checked over), but no receipt produced by the bundle has been verified here. The rails source tree is not
   available here, so adoption is tested against the format and against our own fixtures, not against bytes
   the bundle actually emits. Verify with a real receipt before release.
 - **The signer side of LEVEL 2 is unexercised.** No Falcon-1024 signer is installable in this environment,

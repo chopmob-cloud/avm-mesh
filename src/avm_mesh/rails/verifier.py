@@ -62,14 +62,24 @@ def verify_rails_receipt(receipt: dict,
     if "canonical_bytes_b64" not in receipt or "content_hash" not in receipt:
         raise MeshError("rails receipt must carry canonical_bytes_b64 and content_hash")
 
+    embedded_key = receipt.get("public_key_b64")
+    signature_state = None
     verify_signature = None
+
     if "signature" in receipt:
-        if operator_pubkey_b64 is None:
-            # Present but unverifiable. Reporting it as valid would be the exact
-            # overclaim this kit exists to avoid.
-            verify_signature = None
-        else:
-            verify_signature = _operator_verifier(operator_pubkey_b64)
+        pinned = operator_pubkey_b64
+        if pinned is not None and embedded_key is not None and pinned != embedded_key:
+            # A receipt may not name a key that differs from the one you pinned.
+            raise MeshError(
+                "operator key mismatch: the receipt carries a different public key "
+                "than the one pinned by the caller"
+            )
+        # With no pinned key, the embedded one can still check the signature, but
+        # it is SELF-ASSERTED: whoever wrote the receipt chose the key, so this
+        # proves internal consistency, not the operator's identity.
+        key = pinned or embedded_key
+        signature_state = "valid" if pinned else "self-asserted"
+        verify_signature = _operator_verifier(key) if key else None
 
     result = verify_sealed(
         receipt,
@@ -80,8 +90,10 @@ def verify_rails_receipt(receipt: dict,
     )
 
     levels = result["levels"]
-    if "signature" in receipt and operator_pubkey_b64 is None:
-        levels["signature"] = "present-unverified"
+    if "signature" in receipt:
+        # verify_sealed reports a bare True; the rails distinction between a
+        # pinned key and a self-asserted one is information the caller needs.
+        levels["signature"] = signature_state if levels["signature"] is True else levels["signature"]
 
     return {
         "levels": levels,
@@ -119,7 +131,12 @@ def _operator_verifier(pubkey_b64: str):
             sig = base64.b64decode(signature["sig_b64"], validate=True)
         except Exception as exc:
             raise MeshError("signature is not valid base64") from exc
-        digest = hashlib.sha256(content_bytes).digest()
-        return bool(falcon1024_verify(pubkey, digest, sig))
+        # The rails sign the HEX STRING of the digest, encoded UTF-8 -- not the
+        # raw 32 bytes. Verified against their shipped verifier:
+        #     falcon_verify(pk, computed.encode("utf-8"), sig)
+        # where computed = sha256(cb).hexdigest(). Signing the raw digest instead
+        # would produce a verifier that rejects every genuine rails receipt.
+        payload = hashlib.sha256(content_bytes).hexdigest().encode("utf-8")
+        return bool(falcon1024_verify(pubkey, payload, sig))
 
     return verify

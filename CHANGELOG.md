@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.4.0
+
+### Added — the rails adoption kit (`avm_mesh.rails`)
+
+`verify_rails_receipt()` verifies the AlgoVoi Payment Rails receipt format and reports three levels
+separately, never collapsed into one boolean:
+
+| Level | Check |
+|---|---|
+| 1 | `sha256(canonical_bytes) == content_hash` |
+| 2 | the operator's Falcon-1024 signature over that hash — via `avm_proofpack`, **not** `pqcrypto` |
+| 3 | consensus attestation, anchor-required, inside the hashed bytes |
+
+It is an **adapter**, not a second implementation: the rules live once in `sealed` and `attestation`.
+Two implementations of the same verification logic is how one of them ends up weaker.
+
+`python -m avm_mesh.rails verify receipt.json ...` delegates to the existing CLI, so the exit codes and
+output are identical by construction.
+
+### Why this exists
+
+The rails' shipped standalone verifier imports `pqcrypto.sign.falcon_1024`, which fails on any current
+install (`pqcrypto` 1.0.0 removed Falcon when PQClean was archived). It also stops at LEVEL 2, where the
+trust root is the operator. `docs/RAILS-MIGRATION.md` covers the swap, the dependency change, the
+customer-facing trust statement, and what remains unproven.
+
+### Validation
+
+- 13 new tests. Negative control: disabling the integrity comparison turns **2 failed, 11 passed**;
+  restoring returns **13 passed** — which also demonstrates that LEVEL 3 is protected by the LEVEL 1 hash.
+- The first mutation attempt silently matched nothing; the assertion that it applied is what caught it,
+  not the test result.
+
 ## 0.3.0
 
 ### Fixed — the settlement amount is now bound to the transaction

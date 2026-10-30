@@ -48,9 +48,11 @@ verdict $? "offline install from wheels only"
 # green number below describes code that is not in the repository. Hardcoded
 # versions rot: this check said 0.2.2 after the bump to 0.3.0 and printed a note
 # instead of failing.
-EXPECTED_VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' "$SRC/pyproject.toml" | head -1)
+# CRLF must be stripped: pyproject.toml is edited on Windows and staged to Linux,
+# so a naive capture yields "0.4.0\r" and the comparison can never succeed.
+EXPECTED_VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' "$SRC/pyproject.toml" | head -1 | tr -d '\r')
 [ -n "$EXPECTED_VERSION" ] || { echo "cannot read version from $SRC/pyproject.toml"; exit 1; }
-INSTALLED_VERSION=$("$VENV"/bin/pip show avm-mesh 2>/dev/null | sed -n 's/^Version: //p')
+INSTALLED_VERSION=$("$VENV"/bin/pip show avm-mesh 2>/dev/null | sed -n 's/^Version: //p' | tr -d '\r')
 if [ "$INSTALLED_VERSION" = "$EXPECTED_VERSION" ]; then
     verdict 0 "installed wheel matches source version $EXPECTED_VERSION"
 else

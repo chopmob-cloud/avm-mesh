@@ -6,7 +6,7 @@ The bundle itself is stored once per attested interval, never per transaction.
 """
 from .attestation import ConsensusAttestation, attest, verify_attestation
 from .effects import verify_settlement_amount
-from . import a2a, produce, service, trust
+from . import a2a, rails, produce, service, trust
 from .produce import produce as produce_receipt
 from .service import Store, WitnessInfo
 from .trust import TrustPolicy, load_policy, verify_with_policy
@@ -42,4 +42,4 @@ __all__ = [
     "create_receipt",
     "verify_receipt",
 ]
-__version__ = "0.3.0"
+__version__ = "0.4.0"

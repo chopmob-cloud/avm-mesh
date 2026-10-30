@@ -50,10 +50,49 @@ The five failures are in the reference SUT, not ours:
 
 Worth stating plainly: **the stock reference SUT does not pass its own TCK at `must` level.**
 
-## 3. What is still not done
+## 3. The TCK with our extension served — A/B, identical outcomes
 
-- **No TCK run with our extension advertised.** The extension is not served by any agent here, so no
-  requirement has been exercised through our code.
+A SUT (`tools/sut/avm_sut.py`) was derived from the reference one with exactly two differences: the card
+advertises our extension via `avm_mesh.extension_descriptor()`, and a `settlement-evidence-*` message id
+returns a real receipt built by `avm_mesh.as_artifact()`, converted through the SDK's own
+`json_format.Parse(..., Part())`.
+
+| Run | Result |
+|---|---|
+| reference SUT (baseline) | **5 failed, 183 passed, 47 skipped, 30 deselected** |
+| our SUT, extension advertised | **5 failed, 183 passed, 47 skipped, 30 deselected** |
+| failures in both | the same five, all inherited from the reference SUT |
+
+Identical outcomes, same five failures. Advertising our extension and returning our artifact **costs zero
+protocol conformance**, and adds nothing to the baseline's failures.
+
+### The extension path, exercised end to end
+
+```
+card: AlgoVoi settlement-evidence SUT
+extension uri: https://algovoi.co.uk/a2a/extensions/settlement-evidence/v1
+
+task state: TASK_STATE_COMPLETED
+artifacts: 1
+  part keys: ['data', 'mediaType'] | mediaType: application/json
+  extension: https://algovoi.co.uk/a2a/extensions/settlement-evidence/v1
+  LEVEL 1 recomputed == declared: True
+  settlement payload: {'amount_microunits': '1000000', 'chain': 'voi',
+                       'tx_id': 'TCK-settlement-evidence-probe-1'}
+```
+
+The receipt's bytes survive the round trip through a real SDK server and JSON-RPC, and recomputing
+`sha256(canonical_bytes)` on the receiver side still equals the declared `content_hash`. The part carries
+`data` + `mediaType` and no `kind` — the v1.0 form.
+
+What this SUT does **not** do: anchor a tier. It seals LEVEL 1 integrity only, because a `stake_attested`
+claim needs a trusted-voters anchor and a proofpack it can reach, and emitting one without those would be a
+fabricated trust claim.
+
+## 4. What is still not done
+
+- **No extension *semantic* validation, and none is possible with this TCK.** The A/B above proves our
+  presence breaks nothing; it cannot prove the extension's own rules, because the TCK does not test them.
 - **The TCK has no extension-payload requirements.** Grepping `tests/compatibility` for `EXT-*` returns
   nothing; extensions appear only in `ExtensionSupportRequiredError` handling. A green TCK run therefore
   cannot validate extension *semantics* — at most it would show our presence does not break protocol

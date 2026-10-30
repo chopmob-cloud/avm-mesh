@@ -41,10 +41,22 @@ ls "$ART" >/dev/null 2>&1; verdict $? "artefacts staged"
 
 echo "=== 2. offline install ==="
 python -m venv "$VENV" >/dev/null 2>&1
-"$VENV"/bin/pip install -q --no-index --find-links "$ART" avm_mesh avm_proofpack pytest >/tmp/install.log 2>&1
+"$VENV"/bin/pip install -q --no-index --find-links "$ART" avm_mesh avm_proofpack avm_effectproof pytest >/tmp/install.log 2>&1
 verdict $? "offline install from wheels only"
-"$VENV"/bin/pip show avm-mesh | grep -q "Version: 0.2.2"
-[ "$?" -eq 0 ] || echo "NOTE  installed version is not 0.2.2 -- check the wheel you staged"
+
+# The installed version must match the source, or the wheel is stale and every
+# green number below describes code that is not in the repository. Hardcoded
+# versions rot: this check said 0.2.2 after the bump to 0.3.0 and printed a note
+# instead of failing.
+EXPECTED_VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' "$SRC/pyproject.toml" | head -1)
+[ -n "$EXPECTED_VERSION" ] || { echo "cannot read version from $SRC/pyproject.toml"; exit 1; }
+INSTALLED_VERSION=$("$VENV"/bin/pip show avm-mesh 2>/dev/null | sed -n 's/^Version: //p')
+if [ "$INSTALLED_VERSION" = "$EXPECTED_VERSION" ]; then
+    verdict 0 "installed wheel matches source version $EXPECTED_VERSION"
+else
+    echo "      expected $EXPECTED_VERSION, installed ${INSTALLED_VERSION:-<none>}"
+    verdict 1 "installed wheel does not match source version"
+fi
 
 echo "=== 3. suite (skips are failures) ==="
 "$VENV"/bin/python -m pytest "$SRC/tests" -q --junitxml=/tmp/j.xml >/tmp/pytest.log 2>&1

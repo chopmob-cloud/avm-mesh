@@ -57,6 +57,17 @@ avm-mesh verify receipt.json --evidence ./proofpacks \
 Exit `0` verified, `2` failed, `3` usage. `--json` for machines. Add `--operator-pubkey-b64` to also
 check LEVEL 2 (the operator's Falcon-1024 signature over the content hash).
 
+## The amount is verified, not asserted
+
+A receipt carries an `amount`. Since 0.3.0 that figure is checked against the **authenticated**
+`SignedTxnInBlock` via `avm-effectproof`: `produce()` and `verify_sealed()` both refuse a settlement
+whose amount cannot be mapped to a single unambiguous on-chain transfer. App calls, key registrations,
+close-remainder transactions and assets the transaction did not move are refused rather than guessed at.
+
+If you produce evidence with an older version, or with a settlement shape this binding does not
+understand, the receipt is refused — which is the intended behaviour. Do not work around it by omitting
+the amount: a receipt without a verified amount is not evidence of a payment.
+
 ## What each pin buys you
 
 | Pin | Stops |
@@ -66,6 +77,7 @@ check LEVEL 2 (the operator's Falcon-1024 signature over the content hash).
 | evidence digest | substituting a different bundle behind a pointer |
 | attested interval | pointing at a real proofpack that covers a different interval |
 | txid + round | reusing valid evidence for a different settlement |
+| amount vs authenticated STIB | a receipt asserting a figure the transaction did not move |
 | trust tier equality | advertising a stronger claim than the evidence earns |
 | witness bonds + operator ids | counting one stake twice as a quorum |
 

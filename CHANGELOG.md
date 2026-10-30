@@ -28,6 +28,12 @@ passed; verify_sealed: 1 failed → restored 10 passed).
 - The review request's "LEVEL 2 has never seen a real key" was overstated once the `pqcrypto` dependency
   was removed; it now states precisely what the KAT vectors prove and what remains unproven.
 
+### Docs
+
+- **`docs/PQC-FALCON.md`**: why `pqcrypto` 1.0.0 no longer provides Falcon (PQClean archived; upstream
+  rewrote onto Rust and dropped it), why we cannot substitute ML-DSA (Algorand/Voi fix Falcon in the
+  protocol), the implementation we use instead, the rejected alternatives, and the residual risks.
+
 ### Notes
 
 - **202 tests, 0 skipped**, clean-room green in a fresh Docker container on VM2 with an offline

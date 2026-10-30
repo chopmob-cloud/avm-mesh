@@ -79,6 +79,13 @@ assert report.trust_root == "stake_attested"
 
 
 
+## Post-quantum dependency
+
+Falcon-1024 is verified with `avm_proofpack.consensus.falcon` (stdlib-only). `pqcrypto` 1.0.0 removed
+Falcon entirely when it migrated off the now-archived PQClean, so `pip install pqcrypto` no longer
+provides a Falcon verifier. Why, what replaces it, and what remains unproven:
+**`docs/PQC-FALCON.md`**.
+
 ## The framework, end to end
 
 | Component | Role |

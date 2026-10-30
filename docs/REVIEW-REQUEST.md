@@ -1,4 +1,4 @@
-# Independent review request — avm-mesh 0.2.2 (`627ed67`)
+# Independent review request — avm-mesh 0.3.0 (`1b27b63`)
 
 What I want from you is **adversarial review of running code**, not a read-through. Every real defect in
 this estate so far was found by attacking it — five by you in `avm-proofpack`, two by me attacking
@@ -11,7 +11,7 @@ git clone https://github.com/chopmob-cloud/avm-mesh && cd avm-mesh
 pip install avm-proofpack==0.4.1   # or: pip install -e ../avm-proofpack @ c97dcc3
 pip install -e . && pip install pytest
 
-python -m pytest tests/ -q                     # expect 200 passed, 0 skipped
+python -m pytest tests/ -q                     # expect 202 passed, 0 skipped
 python tools/audit_trust_boundary.py           # expect rule A OK; B/C/D advisory
 python tools/red_team.py --fixture <bundle>.json.gz   # expect RED TEAM CLEAN
 ```
@@ -20,13 +20,13 @@ The fixture is `avm-proofpack/tests/fixtures/stake_attested_algorand_66457600.js
 
 A clean-room run is reproducible with a fresh `python:3.12-slim`, an offline `--no-index` install from
 the staged wheels, and the suite executed against **site-packages** rather than the source tree. Both
-give 200 passed, 0 skipped as of `e8555a4`. `tools/cleanroom.sh` encodes the whole check and treats a
+give 202 passed, 0 skipped as of `07e2a74`. `tools/cleanroom.sh` encodes the whole check and treats a
 skipped test as a failure -- an unstaged input used to make tests decline to run while the run still
 looked green.
 
 ## What has already been proven, so you can skip it
 
-- **200 tests, 0 skipped**, clean-room validated against the installed wheel, not the source tree.
+- **202 tests, 0 skipped**, clean-room validated against the installed wheel, not the source tree.
 - **14 red-team attacks refused**, positive control first: path traversal, digest substitution, tier
   upgrade, anchor mismatch, genesis pin for another chain, interval shift, txid reuse, receipt rewriting.
 - **Guards proven load-bearing by mutation**: disabling the attested-interval binding turns
@@ -52,7 +52,7 @@ or a verification path through `avm-effectproof`. Convince me which.
 
 This was originally stated as "LEVEL 2 has never seen a real key". That overstates the gap as the code
 now stands, and is corrected here. `cli._make_signature_verifier` no longer calls `pqcrypto` at all --
-it uses `avm_proofpack.consensus.falcon.falcon1024_verify` (stdlib-only; `pqcrypto` 1.0.0 dropped Falcon).
+it uses `avm_proofpack.consensus.falcon.falcon1024_verify` (stdlib-only; `pqcrypto` 1.0.0 dropped Falcon entirely -- see `docs/PQC-FALCON.md` for why and what replaces it).
 `tests/test_level2_real_falcon.py` exercises that primitive against **genuine Falcon-1024 KAT vectors**
 (real keys and signatures, not stubs), proves rejection under a changed message and a different key, and
 proves the plumbing by substitution (the verifier is replaced with a recorder, so the test fails if the

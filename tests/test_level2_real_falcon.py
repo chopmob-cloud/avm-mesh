@@ -122,10 +122,28 @@ def test_verifier_rejects_a_non_base64_key():
 
 # --- 3. the dependency decision -------------------------------------------
 
-def test_level2_does_not_import_pqcrypto():
-    """pqcrypto 1.0.0 dropped Falcon; importing it would break LEVEL 2."""
-    import avm_mesh.cli as cli
+def test_no_module_imports_pqcrypto():
+    """pqcrypto 1.0.0 dropped Falcon; any import of it is a latent break.
 
-    source = pathlib.Path(cli.__file__).read_text(encoding="utf-8")
-    assert "import pqcrypto" not in source
-    assert "from pqcrypto" not in source
+    Scans every module, not just cli: a future caller reaching for
+    ``pqcrypto.sign.falcon_1024`` would fail on import for anyone who installed
+    pqcrypto today. See docs/PQC-FALCON.md.
+    """
+    import avm_mesh
+
+    pkg = pathlib.Path(avm_mesh.__file__).parent
+    offenders = []
+    for path in sorted(pkg.glob("*.py")):
+        source = path.read_text(encoding="utf-8")
+        if "import pqcrypto" in source or "from pqcrypto" in source:
+            offenders.append(path.name)
+    assert not offenders, f"modules importing the broken dependency: {offenders}"
+
+
+def test_the_pqc_decision_is_documented():
+    """The reasoning must live in the repo, not in a chat log."""
+    doc = pkg_docs = pathlib.Path(__file__).resolve().parents[1] / "docs" / "PQC-FALCON.md"
+    assert doc.exists(), "docs/PQC-FALCON.md is missing"
+    text = doc.read_text(encoding="utf-8")
+    for required in ("PQClean", "FN-DSA", "avm_proofpack.consensus.falcon", "unaudited"):
+        assert required in text, f"PQC note no longer covers {required!r}"

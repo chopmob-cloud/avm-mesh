@@ -55,7 +55,9 @@ avm-mesh verify receipt.json --evidence ./proofpacks \
 ```
 
 Exit `0` verified, `2` failed, `3` usage. `--json` for machines. Add `--operator-pubkey-b64` to also
-check LEVEL 2 (the operator's Falcon-1024 signature over the content hash).
+check LEVEL 2 (the operator's Falcon-1024 signature over the content hash). Falcon is verified with
+`avm_proofpack.consensus.falcon` -- stdlib-only. Do **not** install `pqcrypto` for this: 1.0.0 removed
+Falcon. See `docs/PQC-FALCON.md`.
 
 ## The amount is verified, not asserted
 

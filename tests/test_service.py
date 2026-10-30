@@ -84,8 +84,16 @@ def test_service_endpoint_does_not_serve_files_outside_the_store(store_dir, tmp_
         conn.request("GET", "/receipts/../in_root")
         resp = conn.getresponse()
         body = resp.read()
-        assert resp.status != 200
+        # A malformed name is a 404 (no such resource), never 200 and never a
+        # 500 that would imply a server-side fault.
+        assert resp.status == 404
         assert b"in-root" not in body
+
+        conn2 = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+        conn2.request("GET", "/receipts/not.a.valid.name")
+        resp2 = conn2.getresponse()
+        resp2.read()
+        assert resp2.status == 404
     finally:
         server.shutdown()
         server.server_close()

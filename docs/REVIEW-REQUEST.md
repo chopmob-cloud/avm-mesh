@@ -11,7 +11,7 @@ git clone https://github.com/chopmob-cloud/avm-mesh && cd avm-mesh
 pip install avm-proofpack==0.4.1   # or: pip install -e ../avm-proofpack @ c97dcc3
 pip install -e . && pip install pytest
 
-python -m pytest tests/ -q                     # expect 192 passed
+python -m pytest tests/ -q                     # expect 200 passed, 0 skipped
 python tools/audit_trust_boundary.py           # expect rule A OK; B/C/D advisory
 python tools/red_team.py --fixture <bundle>.json.gz   # expect RED TEAM CLEAN
 ```
@@ -20,12 +20,14 @@ The fixture is `avm-proofpack/tests/fixtures/stake_attested_algorand_66457600.js
 
 A clean-room run is reproducible with a fresh `python:3.12-slim`, an offline `--no-index` install from
 the staged wheels, and the suite executed against **site-packages** rather than the source tree. Both
-give 192 passed as of `627ed67`.
+give 200 passed, 0 skipped as of `e8555a4`. `tools/cleanroom.sh` encodes the whole check and treats a
+skipped test as a failure -- an unstaged input used to make tests decline to run while the run still
+looked green.
 
 ## What has already been proven, so you can skip it
 
-- **192 tests**, clean-room validated against the installed wheel, not the source tree.
-- **13 red-team attacks refused**, positive control first: path traversal, digest substitution, tier
+- **200 tests, 0 skipped**, clean-room validated against the installed wheel, not the source tree.
+- **14 red-team attacks refused**, positive control first: path traversal, digest substitution, tier
   upgrade, anchor mismatch, genesis pin for another chain, interval shift, txid reuse, receipt rewriting.
 - **Guards proven load-bearing by mutation**: disabling the attested-interval binding turns
   `test_receipt.py` red (1 failed, 13 passed) and restoring it returns 14 passed — verified both in the

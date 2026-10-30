@@ -27,6 +27,39 @@ def _file_resolver(root: pathlib.Path):
     return resolve
 
 
+def _make_signature_verifier(pubkey_b64: str):
+    """LEVEL 2: the operator's Falcon-1024 signature over the content hash.
+
+    pqcrypto.verify RETURNS a bool rather than raising, so the return value must
+    be checked -- an unchecked call reads as success for any signature.
+    """
+    import base64 as _b64
+
+    try:
+        pubkey = _b64.b64decode(pubkey_b64, validate=True)
+    except Exception as exc:
+        raise ValueError("operator public key is not valid base64") from exc
+
+    def verify(content_bytes: bytes, signature: dict) -> bool:
+        try:
+            from pqcrypto.sign.falcon_1024 import verify as falcon_verify
+        except Exception as exc:  # pragma: no cover - depends on install
+            raise RuntimeError(
+                "pqcrypto is required to check LEVEL 2: pip install pqcrypto"
+            ) from exc
+        if not isinstance(signature, dict) or "sig_b64" not in signature:
+            raise ValueError("signature object has no sig_b64")
+        sig = _b64.b64decode(signature["sig_b64"], validate=True)
+        # The rails receipt signs the content HASH, not the bytes. Pass the bytes
+        # and let the caller compare; here we hash to match the sealed format.
+        import hashlib as _h
+
+        digest = _h.sha256(content_bytes).digest()
+        return bool(falcon_verify(pubkey, digest, sig))
+
+    return verify
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="avm-mesh")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -40,6 +73,8 @@ def main(argv: list[str] | None = None) -> int:
                    help="trusted voters commitment b64 (required for LEVEL 3)")
     v.add_argument("--ln-proven-weight", type=int, default=None,
                    help="proven-weight bound matching --voters-commitment")
+    v.add_argument("--operator-pubkey-b64", default=None,
+                   help="operator Falcon-1024 public key, to check LEVEL 2")
     v.add_argument("--json", action="store_true", help="machine-readable output")
 
     args = parser.parse_args(argv)

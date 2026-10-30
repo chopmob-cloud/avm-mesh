@@ -40,6 +40,26 @@ def _safe_name(value: str, kind: str) -> str:
     return value
 
 
+def _within_store(base: pathlib.Path, path: pathlib.Path) -> None:
+    """A store entry serves its own bytes, never a symlink redirecting outside.
+
+    _safe_name already forbids separators in the name, so the only remaining
+    escape is a symlink planted at the entry itself (or a symlinked parent):
+    get_receipt('SAFE') following receipts/SAFE.json -> /etc/x.json would hand
+    a caller a file the store never wrote. Refuse the link and assert the
+    resolved path still sits directly in the store directory.
+    """
+    if path.is_symlink():
+        raise MeshError("refusing to serve a symlinked store entry")
+    try:
+        resolved = path.resolve()
+        root = base.resolve()
+    except OSError as exc:
+        raise MeshError("could not resolve store path") from exc
+    if resolved.parent != root:
+        raise MeshError("store entry escapes the store root")
+
+
 class Store:
     """Filesystem store: proofpacks by digest, receipts by txid."""
 
@@ -76,6 +96,7 @@ class Store:
     def get_proofpack(self, digest: str) -> dict:
         _safe_name(digest, "digest")
         path = self.proofpacks / f"{digest}.json"
+        _within_store(self.proofpacks, path)
         if not path.is_file():
             raise FileNotFoundError(digest)
         bundle = json.loads(path.read_text(encoding="utf-8"))
@@ -88,6 +109,7 @@ class Store:
     def get_receipt(self, txid: str) -> dict:
         _safe_name(txid, "txid")
         path = self.receipts / f"{txid}.json"
+        _within_store(self.receipts, path)
         if not path.is_file():
             raise FileNotFoundError(txid)
         return json.loads(path.read_text(encoding="utf-8"))

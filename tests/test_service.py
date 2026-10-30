@@ -56,6 +56,20 @@ def test_store_refuses_traversal_names(store_dir, tmp_path):
             s.get_proofpack(bad)
 
 
+def test_store_refuses_a_symlinked_entry(store_dir, tmp_path):
+    """A planted symlink inside the store must not be followed outside it."""
+    s = Store(store_dir)
+    outside = tmp_path / "outside.json"
+    outside.write_text(json.dumps({"secret": "via-symlink"}), encoding="utf-8")
+    link = pathlib.Path(s.receipts) / "SAFE.json"
+    try:
+        link.symlink_to(outside)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks not supported in this environment")
+    with pytest.raises(MeshError, match="symlinked store entry"):
+        s.get_receipt("SAFE")
+
+
 def test_service_endpoint_does_not_serve_files_outside_the_store(store_dir, tmp_path):
     """The witness must not return a .json file reached by walking out of root."""
     s = Store(store_dir)

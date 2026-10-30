@@ -77,6 +77,18 @@ def test_attestation_for_another_settlement_is_refused(bundle, anchor):
         verify_attestation(forged, _resolver(bundle), trusted_voters=anchor)
 
 
+def test_a_forged_attested_interval_is_refused(bundle, anchor):
+    """The sealing operator is not trusted: it cannot claim an interval the
+    evidence does not attest, just as the receipt path already enforces."""
+    att = attest(bundle, "file://proofpack.json", trusted_voters=anchor)
+    forged = ConsensusAttestation.from_dict({
+        **att.to_dict(),
+        "last_attested_round": att.last_attested_round + 1,
+    })
+    with pytest.raises(MeshError, match="attested interval mismatch"):
+        verify_attestation(forged, _resolver(bundle), trusted_voters=anchor)
+
+
 def test_v1_attestations_are_refused_by_name():
     """v1 semantics were forgeable; they must not be accepted as equivalent."""
     with pytest.raises(MeshError, match="forgeable"):

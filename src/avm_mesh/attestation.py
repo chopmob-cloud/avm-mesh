@@ -261,4 +261,16 @@ def verify_attestation(attestation: ConsensusAttestation | dict,
             "genesis hash mismatch: attestation records a genesis hash the "
             "evidence does not authenticate to"
         )
+    # Bind the claimed attested interval to the one the evidence actually
+    # attests. LEVEL 3 exists precisely so the operator who sealed this is NOT
+    # trusted; without this check that operator could advertise an interval the
+    # evidence does not cover and still verify -- the same gap verify_receipt
+    # already closes on its pointer interval.
+    if (report.first_attested_round, report.last_attested_round) != (
+            attestation.first_attested_round, attestation.last_attested_round):
+        raise MeshError(
+            f"attested interval mismatch: attestation says "
+            f"[{attestation.first_attested_round}, {attestation.last_attested_round}], "
+            f"evidence attests [{report.first_attested_round}, {report.last_attested_round}]"
+        )
     return report

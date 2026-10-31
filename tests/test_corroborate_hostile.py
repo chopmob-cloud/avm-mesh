@@ -103,6 +103,101 @@ def test_an_empty_operator_id_cannot_satisfy_the_threshold(honest):
         bad.close()
 
 
+def test_an_oversized_receipt_is_refused_not_read_fully(honest):
+    """The receipt cap matters independently of the card cap."""
+    blob = json.dumps({"canonical_bytes_b64": base64.b64encode(b"x" * 10).decode(),
+                       "content_hash": "a" * 64, "pad": "x" * (200_000)}).encode()
+    bad = FakeWitness.__new__ if False else None
+    bad = FakeWitness.__wrapped__ if False else None
+
+    class OversizedReceiptWitness:
+        def __init__(self):
+            self.card = {"witness_id": "w", "operator_id": "op-x", "chain": "mainnet-v1.0"}
+            self.receipt_blob = blob
+
+            class H(BaseHTTPRequestHandler):
+                def do_GET(self):
+                    if self.path.rstrip("/").endswith("/witness"):
+                        payload = json.dumps(self.outer.card).encode()
+                    elif "/receipts/" in self.path:
+                        payload = self.outer.receipt_blob
+                    else:
+                        payload = b"{}"
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(payload)))
+                    self.end_headers()
+                    self.wfile.write(payload)
+
+                def log_message(self, *a):
+                    return
+
+            H.outer = self
+            self.server = ThreadingHTTPServer(("127.0.0.1", 0), H)
+            threading.Thread(target=self.server.serve_forever, daemon=True).start()
+            self.url = "http://127.0.0.1:%d" % self.server.server_address[1]
+
+        def close(self):
+            self.server.shutdown()
+
+    bad = OversizedReceiptWitness()
+    try:
+        result = _collect([honest.url, bad.url])
+        offender = [v for v in result.views if v.url == bad.url][0]
+        assert offender.problem and "limit" in offender.problem
+        assert not offender.counts
+    finally:
+        bad.close()
+
+
+def test_an_oversized_proofpack_is_refused_at_the_cap(honest):
+    """The proofpack cap must also bite independently of the card/receipt caps."""
+    big = "x" * 200_000
+    body = json.dumps({"blob": big}).encode()
+    # Slighty over the 8 MiB cap. The cap bites during the read, before any
+    # hashing or JSON parsing happens, so the form of the body is irrelevant.
+    parts = b"x" * (8 * 1024 * 1024 + 1024)
+
+    class BadProofpackWitness:
+        def __init__(self):
+            self.card = {"witness_id": "w", "operator_id": "op-x", "chain": "mainnet-v1.0"}
+
+            class H(BaseHTTPRequestHandler):
+                def do_GET(self):
+                    if self.path.rstrip("/").endswith("/witness"):
+                        payload = json.dumps(self.outer.card).encode()
+                    elif "/receipts/" in self.path:
+                        payload = json.dumps(_receipt(chain="mainnet-v1.0")).encode()
+                    elif "/proofpacks/" in self.path:
+                        payload = parts
+                    else:
+                        payload = b"{}"
+                    self.send_response(200)
+                    self.send_header("Content-Length", str(len(payload)))
+                    self.end_headers()
+                    self.wfile.write(payload)
+
+                def log_message(self, *a):
+                    return
+
+            H.outer = self
+            self.server = ThreadingHTTPServer(("127.0.0.1", 0), H)
+            threading.Thread(target=self.server.serve_forever, daemon=True).start()
+            self.url = "http://127.0.0.1:%d" % self.server.server_address[1]
+
+        def close(self):
+            self.server.shutdown()
+
+    bad = BadProofpackWitness()
+    try:
+        result = _collect([honest.url, bad.url])
+        offender = [v for v in result.views if v.url == bad.url][0]
+        assert offender.problem and "limit" in offender.problem
+        assert not offender.counts
+    finally:
+        bad.close()
+
+
 def test_a_deeply_nested_card_is_reported_not_raised(honest):
     bad = FakeWitness(raw_card=b"[" * 100_000 + b"]" * 100_000)
     try:

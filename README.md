@@ -476,7 +476,7 @@ what the check above is for.
 
 **`0.7.0`** — `pip install avm-mesh`.
 
-**358 tests, 0 skipped**, on both Python **3.12** (clean-room gate on VM2: offline install from wheels only,
+**361 tests, 0 skipped**, on both Python **3.12** (clean-room gate on VM2: offline install from wheels only,
 audit rule A, red team) and Python **3.10.22** (319 passed), so `Requires-Python: >=3.10` is demonstrated
 rather than asserted. GitHub CI runs the same suite with the fixture provisioned and a missing fixture is a
 failure, not a skip.

@@ -123,3 +123,28 @@ def test_a_directory_url_cannot_point_at_the_metadata_service(monkeypatch):
     _resolve_to(monkeypatch, {"hostile.example": "169.254.169.254"})
     with pytest.raises(MeshError, match="not a public address"):
         load_directory("http://hostile.example/mesh-directory.json")
+
+
+def test_a_declared_small_length_with_a_larger_body_is_refused(monkeypatch):
+    """A server can lie about Content-Length, so the read itself must be capped."""
+    class FakeResponse:
+        status = 200
+        headers: dict = {"Content-Length": "10"}      # a lie
+
+        def read(self, size: int = -1) -> bytes:
+            return b" " * 1024
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc) -> bool:
+            return False
+
+    class FakeOpener:
+        def open(self, url, timeout=None):
+            return FakeResponse()
+
+    monkeypatch.setattr("avm_mesh.net._check_url", lambda *a, **k: None)
+    monkeypatch.setattr("urllib.request.build_opener", lambda *a, **k: FakeOpener())
+    with pytest.raises(MeshError, match="returned more than"):
+        net.fetch("https://example.invalid/x", timeout=2, limit=256)

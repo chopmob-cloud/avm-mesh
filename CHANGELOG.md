@@ -1,6 +1,21 @@
 # Changelog
 
-## 0.7.0 — anchor derivation
+## 0.7.0 — anchor derivation + security hardening
+
+**Behaviour change (SSRF hardening):** `avm-mesh corroborate` now refuses to fetch witnesses whose host
+resolves to a non-public address (loopback, RFC1918, link-local, reserved, multicast, unspecified)
+by default, and all redirect hops are re-resolved and re-checked. Previously, pointing `corroborate`
+at a loopback witness worked; it now needs the explicit `--allow-private` flag. `corroborate --directory`
+(directory documents are attacker-influenced) has always been denied private addresses; the change makes
+`corroborate --witness` behave the same unless opted in. Operators embedding a local witness in their
+corroborate invocation should add `--allow-private`.
+
+**Resource limits:** witness service now caps concurrent connections at 64 (503 on saturation) instead
+of spawning a thread per connection. Proofpack, card and receipt reads are each capped independently.
+Library reads (`Store.get_proofpack`) enforce the proofpack cap so embedders meet the same limit as the
+HTTP path.
+
+## 0.7.0 continued (anchor derivation)
 
 ### Added — `avm-mesh anchor`
 

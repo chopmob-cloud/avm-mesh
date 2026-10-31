@@ -1,5 +1,8 @@
 """Resource bounds: a witness must not be usable as a free amplifier."""
 import json
+import time
+import urllib.request
+import urllib.error
 import urllib.error
 import urllib.request
 
@@ -8,6 +11,7 @@ import pytest
 from avm_mesh import MeshError
 from avm_mesh.receipt import bundle_digest
 from avm_mesh.service import (
+    DEFAULT_MAX_CONNECTIONS,
     DEFAULT_MAX_PROOF_BYTES,
     MAX_PATH_CHARS,
     SOCKET_TIMEOUT_S,
@@ -83,3 +87,57 @@ def test_defaults_are_finite():
     assert DEFAULT_MAX_PROOF_BYTES > 0
     assert SOCKET_TIMEOUT_S > 0
     assert MAX_PATH_CHARS > 0
+
+
+# ---- Claude review findings 2 and 3 ---------------------------------------
+
+def test_library_read_path_refuses_an_oversized_proofpack(tmp_path):
+    """The HTTP handler capped reads; the library path did not."""
+    store = Store(tmp_path / "s", max_proofpack_bytes=512)
+    digest = "b" * 64
+    (store.proofpacks / f"{digest}.json").write_text(
+        json.dumps({"blob": "x" * 4096}), encoding="utf-8")
+    with pytest.raises(MeshError, match="over the .* byte limit"):
+        store.get_proofpack(digest)
+
+
+def test_the_server_refuses_a_meaningless_connection_ceiling(tmp_path):
+    store = Store(tmp_path / "s")
+    for bad in (0, -1):
+        with pytest.raises(MeshError, match="max_connections"):
+            make_server(store, port=0, max_connections=bad)
+
+
+def test_a_default_connection_ceiling_exists():
+    """A thread-per-connection server with no ceiling is a thread bomb."""
+    assert DEFAULT_MAX_CONNECTIONS > 0
+
+
+def test_saturation_sheds_load_with_503_rather_than_growing(tmp_path):
+    store = Store(tmp_path / "s")
+    server = make_server(store, port=0, max_connections=1, rate_limit=1000)
+    import threading
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = "http://127.0.0.1:%d" % server.server_address[1]
+
+    # Hold the single slot with a raw socket that never completes its request, then
+    # try a normal one: it must be shed, not queued behind an unbounded thread.
+    import socket
+    held = socket.create_connection((server.server_address[0], server.server_address[1]))
+    try:
+        time.sleep(0.2)
+        codes = []
+        for _ in range(3):
+            try:
+                with urllib.request.urlopen(base + "/healthz", timeout=3) as response:
+                    codes.append(response.status)
+            except urllib.error.HTTPError as exc:
+                codes.append(exc.code)
+            except Exception as exc:            # a reset connection is also load-shedding
+                codes.append(type(exc).__name__)
+        assert any(code in (503, "ConnectionResetError", "ConnectionRefusedError",
+                            "URLError", "timeout") for code in codes), codes
+    finally:
+        held.close()
+        server.shutdown()

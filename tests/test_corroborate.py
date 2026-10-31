@@ -44,7 +44,7 @@ def _witness(tmp_path, name, operator, *, bundle=None, receipt=None,
 def test_two_independent_operators_agreeing_counts(tmp_path):
     a = _witness(tmp_path, "w-a", "op-a")
     b = _witness(tmp_path, "w-b", "op-b")
-    result = collect("CORROB", [a, b], min_operators=2)
+    result = collect("CORROB", [a, b], min_operators=2, allow_private=True)
     assert result.agreed, result.problems
     assert result.agreed_digest == DIGEST
     assert result.operators == ("op-a", "op-b")
@@ -54,7 +54,7 @@ def test_two_endpoints_of_one_operator_do_not_agree(tmp_path):
     """The cheapest way to fake a mesh: run the same operator twice."""
     a = _witness(tmp_path, "w-a1", "op-a")
     b = _witness(tmp_path, "w-a2", "op-a")
-    result = collect("CORROB", [a, b], min_operators=2)
+    result = collect("CORROB", [a, b], min_operators=2, allow_private=True)
     assert not result.agreed
     assert any("one voice" in p for p in result.problems)
     assert result.operators == ("op-a",)
@@ -65,7 +65,7 @@ def test_witnesses_pointing_at_different_evidence_do_not_agree(tmp_path):
     a = _witness(tmp_path, "w-a", "op-a")
     b = _witness(tmp_path, "w-b", "op-b", bundle=other,
                  receipt=_receipt(digest=bundle_digest(other)))
-    result = collect("CORROB", [a, b], min_operators=2)
+    result = collect("CORROB", [a, b], min_operators=2, allow_private=True)
     assert not result.agreed
     assert any("which proofpack" in p for p in result.problems)
 
@@ -78,7 +78,7 @@ def test_a_tampered_store_refuses_to_serve_at_all(tmp_path):
     """
     a = _witness(tmp_path, "w-a", "op-a")
     b = _witness(tmp_path, "w-b", "op-b", tamper_proofpack=True)
-    result = collect("CORROB", [a, b], min_operators=2)
+    result = collect("CORROB", [a, b], min_operators=2, allow_private=True)
     assert not result.agreed
     bad = [v for v in result.views if v.url == b][0]
     assert bad.problem == "proofpack not served (HTTP 500)"
@@ -110,7 +110,7 @@ def test_client_rejects_a_witness_that_serves_the_wrong_bytes(tmp_path, monkeypa
         return 200, wrong_bundle
 
     monkeypatch.setattr(corroborate, "_get", fake_get)
-    result = collect("CORROB", [witness_url], min_operators=1)
+    result = collect("CORROB", [witness_url], min_operators=1, allow_private=True)
     assert not result.agreed
     assert result.views[0].problem == "proofpack bytes do not match the pointer digest"
     assert not result.views[0].counts
@@ -119,7 +119,7 @@ def test_client_rejects_a_witness_that_serves_the_wrong_bytes(tmp_path, monkeypa
 def test_a_witness_without_a_card_cannot_corroborate(tmp_path):
     a = _witness(tmp_path, "w-a", "op-a")
     b = _witness(tmp_path, "w-b", "op-b", with_card=False)
-    result = collect("CORROB", [a, b], min_operators=2)
+    result = collect("CORROB", [a, b], min_operators=2, allow_private=True)
     assert not result.agreed
     assert result.operators == ("op-a",)
 
@@ -127,31 +127,31 @@ def test_a_witness_without_a_card_cannot_corroborate(tmp_path):
 def test_disagreeing_tiers_are_reported(tmp_path):
     a = _witness(tmp_path, "w-a", "op-a")
     b = _witness(tmp_path, "w-b", "op-b", receipt=_receipt(tier="stake_attested"))
-    result = collect("CORROB", [a, b], min_operators=2)
+    result = collect("CORROB", [a, b], min_operators=2, allow_private=True)
     assert not result.agreed
     assert any("trust tier" in p for p in result.problems)
 
 
 def test_missing_receipt_is_reported_not_raised(tmp_path):
     a = _witness(tmp_path, "w-a", "op-a")
-    result = collect("ABSENT", [a], min_operators=1)
+    result = collect("ABSENT", [a], min_operators=1, allow_private=True)
     assert not result.agreed
     assert "receipt not served" in result.views[0].problem
 
 
 def test_unreachable_witness_is_reported_not_raised():
-    result = collect("CORROB", ["http://127.0.0.1:1"], min_operators=1)
+    result = collect("CORROB", ["http://127.0.0.1:1"], min_operators=1, allow_private=True)
     assert not result.agreed
     assert result.views[0].problem
 
 
 def test_bad_arguments_are_refused():
     with pytest.raises(MeshError):
-        collect("", ["http://x"])
+        collect("", ["http://x"], allow_private=True)
     with pytest.raises(MeshError):
-        collect("CORROB", [])
+        collect("CORROB", [], allow_private=True)
     with pytest.raises(MeshError):
-        collect("CORROB", ["http://x"], min_operators=0)
+        collect("CORROB", ["http://x"], min_operators=0, allow_private=True)
 
 
 # --- the command an operator actually runs --------------------------------
@@ -166,7 +166,7 @@ def test_cli_reports_agreement_and_exits_zero(tmp_path):
     a = _witness(tmp_path, "w-a", "op-a")
     b = _witness(tmp_path, "w-b", "op-b")
     proc = _cli("corroborate", "--txid", "CORROB",
-                "--witness", a, "--witness", b, "--min-operators", "2")
+                "--witness", a, "--witness", b, "--min-operators", "2", "--allow-private")
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert "AGREED" in proc.stdout
     assert "op-a" in proc.stdout and "op-b" in proc.stdout
@@ -176,7 +176,7 @@ def test_cli_refuses_one_operator_twice_with_exit_two(tmp_path):
     a = _witness(tmp_path, "w-a1", "op-a")
     b = _witness(tmp_path, "w-a2", "op-a")
     proc = _cli("corroborate", "--txid", "CORROB",
-                "--witness", a, "--witness", b, "--min-operators", "2")
+                "--witness", a, "--witness", b, "--min-operators", "2", "--allow-private")
     assert proc.returncode == 2, proc.stdout + proc.stderr
     assert "one voice" in proc.stdout
 
@@ -186,7 +186,7 @@ def test_cli_json_output_is_machine_readable(tmp_path):
     a = _witness(tmp_path, "w-a", "op-a")
     b = _witness(tmp_path, "w-b", "op-b")
     proc = _cli("corroborate", "--txid", "CORROB", "--witness", a,
-                "--witness", b, "--json")
+                "--witness", b, "--json", "--allow-private")
     payload = _json.loads(proc.stdout)
     assert payload["agreed"] is True
     assert payload["agreed_digest"] == DIGEST

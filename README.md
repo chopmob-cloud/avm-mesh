@@ -232,6 +232,9 @@ The service is bounded by default: a proofpack over 8 MiB is refused (both at st
 request path over 2048 characters gets 414, more than 120 requests per client per 10 s gets 429 with
 `Retry-After`, and a connection that stalls mid-request is dropped after 10 s.
 
+At most 64 connections are handled at once; beyond that the witness answers 503 rather than accepting
+everything and spawning a thread per connection.
+
 **Behind a reverse proxy these limits key on the socket peer address**, which is the proxy, not the client.
 Every user then shares one quota, and forwarded-client headers are deliberately ignored because trusting them
 lets anyone spoof a fresh bucket per request. If you deploy behind a proxy, raise `--rate-limit` for the shared
@@ -439,6 +442,13 @@ avm-mesh corroborate --txid TH2WRFV... --directory ./mesh-directory.json --min-o
   ]
 }
 ```
+
+**Outbound fetches refuse non-public addresses.** A directory is fetched over the network and then supplies
+the witness URLs, so a hostile document could otherwise point the client at loopback, an RFC1918 host or the
+link-local metadata service. Both the directory fetch and every witness fetch resolve the host and refuse
+anything that is not a public address, and each redirect hop is re-checked, because a public host is free to
+redirect inward. Running a local witness therefore needs `--allow-private`; it is off by default because
+inheriting it from a fetched document is exactly the attack.
 
 **A directory is a lead, not a trust root.** Each entry is checked against the witness's own card at
 collection time, and a directory that disagrees with a card loses: that witness does not count and the

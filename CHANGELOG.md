@@ -31,6 +31,30 @@ Captures are also size-capped at 8 MiB, checked twice: against the file on disk 
 the bytes actually read after decompression. The second check exists because a gzip bomb is small on disk and
 enormous in memory, so a `stat()` alone would wave it through.
 
+### Security — independent review findings
+
+An independent review (Codex) of the 0.7.0 candidate found eight defects; a second reviewer (Claude) then found
+three more. Fixed here, with the evidence status of each recorded in the commit that fixes it:
+
+- **LEVEL 2 was silently skipped.** The CLI accepted `--operator-pubkey-b64` and never passed a verifier, so a
+  requested check did not run and the command exited 0. Now wired, and a key with no signature to check fails
+  closed. The rails entry point declares its own signing convention (hex digest) rather than inheriting the
+  mesh one (raw digest) — the two are not interchangeable.
+- **Corroboration could be aborted or fooled** by a malformed witness card (unhashable or empty `operator_id`),
+  and could report agreement across two different chains. Identity fields are validated, chains are compared,
+  and a card contradicting its own receipt is refused.
+- **Witness responses were unbounded**; per-endpoint caps now apply to cards, receipts and proofpacks.
+- **Anchor loaded every capture in a directory**, not just the rounds the walk needed.
+- **Append-only receipt storage had a check-then-write race**; commits are now atomic (`link()` with an
+  `O_EXCL` fallback), so two conflicting writers cannot both succeed.
+- **The sdist could not run its own tests** (missing `conftest.py` and `_assets.py`); `MANIFEST.in` fixed the
+  contents and the artefact checker now extracts the sdist and collects its tests.
+- **Malformed captures escaped `MeshError`** (truncated gzip, non-ASCII digit filenames).
+- **SSRF:** a fetched directory could point the client at internal addresses. Outbound fetches now resolve and
+  refuse non-public targets and re-check every redirect; `--allow-private` opts a local witness back in.
+- **Concurrency:** the witness server now caps concurrent connections (503 when saturated) instead of spawning a
+  thread per connection without limit, and the library read path enforces the same proofpack size cap as HTTP.
+
 ### Note on a guard found redundant
 
 The interval-grid check duplicates one inside `authenticate_chain`. Mutation testing showed removing it changes

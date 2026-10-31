@@ -197,6 +197,11 @@ class Store:
         _safe_name(digest, "digest")
         path = self.proofpacks / f"{digest}.json"
         _within_store(self.proofpacks, path)
+        if path.is_file() and path.stat().st_size > self.max_proofpack_bytes:
+            # The HTTP handler refuses oversized files, but the library path is public
+            # too; a caller embedding a witness should not be able to be handed one.
+            raise MeshError(
+                f"stored proofpack {digest} is over the {self.max_proofpack_bytes} byte limit")
         if not path.is_file():
             raise FileNotFoundError(digest)
         bundle = json.loads(path.read_text(encoding="utf-8"))
@@ -372,12 +377,51 @@ def _make_handler(store: Store, info: WitnessInfo | None,
     return Handler
 
 
+#: Concurrent connections a witness will hold open. ThreadingHTTPServer spawns a
+#: thread per connection; without a ceiling a burst is a thread bomb.
+DEFAULT_MAX_CONNECTIONS = 64
+
+
+class _BoundedThreadingHTTPServer(ThreadingHTTPServer):
+    """Refuse when saturated rather than queueing without limit."""
+
+    def __init__(self, *args, max_connections: int = DEFAULT_MAX_CONNECTIONS, **kwargs):
+        if not isinstance(max_connections, int) or isinstance(max_connections, bool) \
+                or max_connections <= 0:
+            raise MeshError("max_connections must be a positive integer")
+        super().__init__(*args, **kwargs)
+        self._slots = threading.BoundedSemaphore(max_connections)
+        self.max_connections = max_connections
+
+    def process_request(self, request, client_address):
+        if not self._slots.acquire(blocking=False):
+            # Shed load instead of growing: a saturated witness answering 503 is
+            # honest about its state; one accepting everything is not.
+            try:
+                request.sendall(b"HTTP/1.0 503 Service Unavailable\r\n"
+                                b"Content-Length: 0\r\nConnection: close\r\n\r\n")
+            except OSError:
+                pass
+            finally:
+                self.shutdown_request(request)
+            return
+        super().process_request(request, client_address)
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._slots.release()
+
+
 def make_server(store: Store, host: str = "127.0.0.1", port: int = 0,
                 info: WitnessInfo | None = None, *,
                 rate_limit: int = DEFAULT_RATE_LIMIT,
-                rate_window_s: float = DEFAULT_RATE_WINDOW_S) -> ThreadingHTTPServer:
-    server = ThreadingHTTPServer(
-        (host, port), _make_handler(store, info, rate_limit, rate_window_s))
+                rate_window_s: float = DEFAULT_RATE_WINDOW_S,
+                max_connections: int = DEFAULT_MAX_CONNECTIONS) -> ThreadingHTTPServer:
+    server = _BoundedThreadingHTTPServer(
+        (host, port), _make_handler(store, info, rate_limit, rate_window_s),
+        max_connections=max_connections)
     server.daemon_threads = True
     return server
 

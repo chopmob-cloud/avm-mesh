@@ -30,6 +30,7 @@ import pathlib
 import urllib.error
 import urllib.request
 
+from . import net
 from .receipt import MeshError
 
 DIRECTORY_VERSION = 1
@@ -83,23 +84,17 @@ def parse_directory(document: dict) -> list[dict]:
     return cleaned
 
 
-def load_directory(source: str, *, timeout: float = 5.0) -> list[dict]:
+def load_directory(source: str, *, timeout: float = 5.0,
+                   allow_private: bool = False) -> list[dict]:
     """Load a directory from an http(s) URL or a local path."""
     if not isinstance(source, str) or not source:
         raise MeshError("directory source must be a non-empty string")
 
     if source.startswith(("http://", "https://")):
-        try:
-            with urllib.request.urlopen(source, timeout=timeout) as response:
-                declared = response.headers.get("Content-Length")
-                if declared is not None and declared.isdigit() \
-                        and int(declared) > MAX_DIRECTORY_BYTES:
-                    raise MeshError(f"directory is too large ({declared} bytes declared)")
-                body = response.read(MAX_DIRECTORY_BYTES + 1)
-        except urllib.error.HTTPError as exc:
-            raise MeshError(f"directory at {source} returned HTTP {exc.code}") from exc
-        except (urllib.error.URLError, OSError) as exc:
-            raise MeshError(f"cannot reach directory {source}: {exc}") from exc
+        status, body = net.fetch(source, timeout=timeout, limit=MAX_DIRECTORY_BYTES,
+                                 allow_private=allow_private)
+        if status != 200:
+            raise MeshError(f"directory at {source} returned HTTP {status}")
     else:
         path = pathlib.Path(source)
         try:

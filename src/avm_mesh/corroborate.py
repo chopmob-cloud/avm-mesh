@@ -24,6 +24,7 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
 
+from . import net
 from .receipt import MeshError, SettlementReceipt, bundle_digest
 
 
@@ -109,25 +110,15 @@ MAX_RECEIPT_BYTES = 64 * 1024
 MAX_PROOF_BYTES = 8 * 1024 * 1024
 
 
-def _get(url: str, timeout: float,
-         limit: int = MAX_RECEIPT_BYTES) -> tuple[int, bytes]:
-    try:
-        with urllib.request.urlopen(url, timeout=timeout) as response:
-            declared = response.headers.get("Content-Length")
-            if declared is not None and declared.isdigit() and int(declared) > limit:
-                raise MeshError(f"{url} declares {declared} bytes, over the {limit} limit")
-            body = response.read(limit + 1)
-            if len(body) > limit:
-                raise MeshError(f"{url} returned more than the {limit} byte limit")
-            return response.status, body
-    except urllib.error.HTTPError as exc:
-        return exc.code, b""
-    except (urllib.error.URLError, OSError) as exc:
-        raise MeshError(f"cannot reach {url}: {exc}") from exc
+def _get(url: str, timeout: float, limit: int = MAX_RECEIPT_BYTES,
+         allow_private: bool = False) -> tuple[int, bytes]:
+    """Guarded fetch: public addresses only unless the caller opts in."""
+    return net.fetch(url, timeout=timeout, limit=limit, allow_private=allow_private)
 
 
-def _card(base: str, timeout: float) -> dict:
-    status, body = _get(base.rstrip("/") + "/witness", timeout, limit=MAX_CARD_BYTES)
+def _card(base: str, timeout: float, allow_private: bool = False) -> dict:
+    status, body = _get(base.rstrip("/") + "/witness", timeout, limit=MAX_CARD_BYTES,
+                        allow_private=allow_private)
     if status != 200:
         return {}
     try:
@@ -154,7 +145,8 @@ def _identity(card: dict, field: str) -> str | None:
 
 
 def collect(txid: str, witness_urls: list[str], *, min_operators: int = 2,
-            timeout: float = 5.0, hints: dict[str, dict] | None = None) -> Corroboration:
+            timeout: float = 5.0, hints: dict[str, dict] | None = None,
+            allow_private: bool = False) -> Corroboration:
     """Ask each witness for the same receipt and decide whether they agree.
 
     ``hints`` carries what a directory *claimed* about each URL. It is used only to
@@ -176,13 +168,15 @@ def collect(txid: str, witness_urls: list[str], *, min_operators: int = 2,
         raise MeshError("timeout must be a positive number of seconds")
     if hints is not None and not isinstance(hints, dict):
         raise MeshError("hints must be a mapping of URL to claimed fields")
+    if not isinstance(allow_private, bool):
+        raise MeshError("allow_private must be a boolean")
 
     result = Corroboration(txid=txid, min_operators=min_operators)
 
     for url in witness_urls:
         view = WitnessView(url=url)
         try:
-            card = _card(url, timeout)
+            card = _card(url, timeout, allow_private=allow_private)
             view.witness_id = _identity(card, "witness_id")
             view.operator_id = _identity(card, "operator_id")
             view.card_chain = card.get("chain") if isinstance(card.get("chain"), str) else None
@@ -196,7 +190,8 @@ def collect(txid: str, witness_urls: list[str], *, min_operators: int = 2,
                         f"card disagrees with the directory about {field}: "
                         f"directory says {declared!r}, witness says {card.get(field)!r}")
 
-            status, body = _get(f"{url.rstrip('/')}/receipts/{txid}", timeout)
+            status, body = _get(f"{url.rstrip('/')}/receipts/{txid}", timeout,
+                                allow_private=allow_private)
             if status != 200:
                 view.problem = f"receipt not served (HTTP {status})"
             else:
@@ -215,7 +210,8 @@ def collect(txid: str, witness_urls: list[str], *, min_operators: int = 2,
                 # witness that points at good evidence while serving something
                 # else is the substitution this design exists to catch.
                 status, body = _get(
-                    f"{url.rstrip('/')}/proofpacks/{receipt.pointer.digest}", timeout)
+                    f"{url.rstrip('/')}/proofpacks/{receipt.pointer.digest}", timeout,
+                    limit=MAX_PROOF_BYTES, allow_private=allow_private)
                 if status != 200:
                     view.problem = f"proofpack not served (HTTP {status})"
                 else:

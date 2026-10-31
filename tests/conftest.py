@@ -19,6 +19,11 @@ GENESIS = "wGHE2Pwdvd7S12BL5FaOP20EGYesN73ktiC1qzkkit8="
 def bundle():
     path = pathlib.Path(os.environ.get("AVM_MESH_FIXTURE", DEFAULT_FIXTURE))
     if not path.exists():
+        # A missing fixture is normally a skip for a developer who has not cloned
+        # the sibling repo. In a gate it must be a failure: "215 passed, 81 skipped"
+        # is not evidence that the crypto paths work.
+        if os.environ.get("AVM_MESH_REQUIRE_FIXTURE") == "1":
+            pytest.fail(f"AVM_MESH_REQUIRE_FIXTURE=1 but the fixture is absent at {path}")
         pytest.skip(f"fixture not present at {path}")
     with gzip.open(path, "rt", encoding="utf-8") as f:
         return json.load(f)

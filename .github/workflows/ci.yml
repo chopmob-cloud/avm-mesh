@@ -22,10 +22,20 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install . pytest
+      - name: fetch the mainnet fixture
+        # Pinned to the avm-proofpack commit that 0.4.1 shipped from, so the evidence
+        # the suite runs against cannot change underneath us.
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/fixture.json.gz" \
+            https://raw.githubusercontent.com/chopmob-cloud/avm-proofpack/c97dcc3/tests/fixtures/stake_attested_algorand_66457600.json.gz
+          ls -l "$RUNNER_TEMP/fixture.json.gz"
       - name: suite
-        # Skips are reported but not fatal here; the clean-room gate on VM2 treats
-        # a skip as a failure, and that is the gate a release must pass.
-        run: python -m pytest tests -q
+        # A skip here would mean the crypto paths silently did not run, which is how
+        # a green tick covers 81 fewer tests than the gate. The fixture is required.
+        env:
+          AVM_MESH_FIXTURE: ${{ runner.temp }}/fixture.json.gz
+          AVM_MESH_REQUIRE_FIXTURE: "1"
+        run: python -m pytest tests -q -rs
 
   artefacts:
     name: artefacts (licence + metadata)

@@ -10,7 +10,8 @@ import pytest
 
 import _assets
 from avm_mesh import MeshError
-from avm_mesh.anchor import links_from_directory, walk
+from avm_mesh import anchor as anchor_module
+from avm_mesh.anchor import links_from_directory, load_bundle, walk
 
 GENESIS = "wGHE2Pwdvd7S12BL5FaOP20EGYesN73ktiC1qzkkit8="
 TARGET = 66457600
@@ -188,3 +189,49 @@ def test_unparseable_filenames_are_refused(tmp_path):
     (directory / "bundle.json").write_text("{}", encoding="utf-8")
     with pytest.raises(MeshError, match="filename must be the attested round"):
         links_from_directory(directory, base64.b64decode(GENESIS))
+
+
+# ------------------------------------------------------------ size and bombs
+
+def test_an_oversized_capture_is_refused_before_reading(tmp_path, monkeypatch):
+    """Cheap check first: a huge plain file never gets opened."""
+    monkeypatch.setattr(anchor_module, "MAX_BUNDLE_BYTES", 512)
+    big = tmp_path / "66457600.json"
+    big.write_text("x" * 4096, encoding="utf-8")
+    with pytest.raises(MeshError, match="on disk, over the"):
+        load_bundle(big)
+
+
+def test_a_gzip_bomb_is_refused(tmp_path, monkeypatch):
+    """Compressed size says nothing about expansion, so the read itself is capped.
+
+    This is the case a stat() check cannot catch: 5 KB on disk, megabytes in memory.
+    """
+    monkeypatch.setattr(anchor_module, "MAX_BUNDLE_BYTES", 1024)
+    bomb = tmp_path / "66457600.json.gz"
+    with gzip.open(bomb, "wt", encoding="utf-8") as handle:
+        handle.write(" " * 200_000)
+    on_disk = bomb.stat().st_size
+    assert on_disk < 1024, f"test needs a small compressed file, got {on_disk} bytes"
+    with pytest.raises(MeshError, match="expands past"):
+        load_bundle(bomb)
+
+
+def test_a_normal_bundle_still_loads(tmp_path):
+    path = tmp_path / "b.json"
+    path.write_text('{"a": 1}', encoding="utf-8")
+    assert load_bundle(path) == {"a": 1}
+
+
+def test_a_corrupt_gzip_is_refused_not_crashed(tmp_path):
+    path = tmp_path / "b.json.gz"
+    path.write_bytes(b"not a gzip stream")
+    with pytest.raises(MeshError, match="cannot read"):
+        load_bundle(path)
+
+
+def test_deeply_nested_json_is_refused_not_crashed(tmp_path):
+    path = tmp_path / "b.json"
+    path.write_text("[" * 100_000 + "]" * 100_000, encoding="utf-8")
+    with pytest.raises(MeshError):
+        load_bundle(path)

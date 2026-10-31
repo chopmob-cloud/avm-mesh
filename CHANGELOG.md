@@ -27,6 +27,10 @@ replaces one per bundle, and the distance between them is auditable.
 Capture directories are strict: the filename must be the round the bundle's own message attests, because a
 mislabelled capture would otherwise be walked as if it belonged somewhere it did not.
 
+Captures are also size-capped at 8 MiB, checked twice: against the file on disk before opening, and against
+the bytes actually read after decompression. The second check exists because a gzip bomb is small on disk and
+enormous in memory, so a `stat()` alone would wave it through.
+
 ### Note on a guard found redundant
 
 The interval-grid check duplicates one inside `authenticate_chain`. Mutation testing showed removing it changes

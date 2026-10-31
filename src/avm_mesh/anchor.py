@@ -30,6 +30,12 @@ from .receipt import MeshError
 #: Algorand and Voi attest every 256 rounds.
 DEFAULT_INTERVAL = 256
 
+#: Largest capture this will read. Real proofpacks are ~0.5-0.9 MB; the cap exists so
+#: a capture directory cannot be used as a memory-exhaustion primitive. It applies to
+#: the DECOMPRESSED bytes: a gzip bomb is small on disk and enormous when read, which
+#: is exactly why a stat() alone is not enough.
+MAX_BUNDLE_BYTES = 8 * 1024 * 1024
+
 
 @dataclass
 class AnchorWalk:
@@ -68,13 +74,35 @@ def _b64(value: str, what: str, expect_len: int | None = None) -> bytes:
 
 
 def load_bundle(path: pathlib.Path) -> dict:
-    """Read a captured proofpack, gzipped or plain."""
-    opener = gzip.open if path.suffix == ".gz" else open
+    """Read a captured proofpack, gzipped or plain, with a hard size cap.
+
+    The cap is checked twice: on the file's own size before opening (cheap, catches a
+    large plain file), and on the bytes actually read *after* decompression (catches a
+    gzip bomb, whose compressed size says nothing about what it expands to).
+    """
     try:
-        with opener(path, "rt", encoding="utf-8") as handle:
-            bundle = json.load(handle)
+        on_disk = path.stat().st_size
     except OSError as exc:
         raise MeshError(f"cannot read {path}: {exc}") from exc
+    if on_disk > MAX_BUNDLE_BYTES:
+        raise MeshError(
+            f"{path} is {on_disk} bytes on disk, over the {MAX_BUNDLE_BYTES} byte limit")
+
+    opener = gzip.open if path.suffix == ".gz" else open
+    try:
+        with opener(path, "rb") as handle:
+            raw = handle.read(MAX_BUNDLE_BYTES + 1)
+    except OSError as exc:
+        # Includes gzip.BadGzipFile and a truncated/corrupt stream.
+        raise MeshError(f"cannot read {path}: {exc}") from exc
+    if len(raw) > MAX_BUNDLE_BYTES:
+        raise MeshError(
+            f"{path} expands past the {MAX_BUNDLE_BYTES} byte limit; refusing to parse it")
+
+    try:
+        bundle = json.loads(raw)
+    except RecursionError as exc:
+        raise MeshError(f"{path} is nested too deeply to parse") from exc
     except ValueError as exc:
         raise MeshError(f"{path} is not valid JSON: {exc}") from exc
     if not isinstance(bundle, dict):

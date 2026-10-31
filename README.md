@@ -8,6 +8,9 @@ position — **the node set is the interop layer**. A node on the source chain p
 because it already holds the full block. A node on the destination chain verifies that evidence because
 it *cannot* see those blocks. Nothing new needs to be trusted; the asymmetry is the protocol.
 
+Why this exists, and the three gaps between the receipt format and decentralised agentic commerce:
+[`docs/WHY.md`](docs/WHY.md). Current blockers and who owns each: [`docs/HANDOVER.md`](docs/HANDOVER.md).
+
 ## Install
 
 ```sh

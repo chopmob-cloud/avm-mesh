@@ -29,8 +29,9 @@ Related artefacts outside the repo: handover and review documents in
 - **GitHub CI** on `ac92eb0`: `tests (3.10)`, `tests (3.12)`, `artefacts`, `a2a TCK (jsonrpc, must)` all
   success. The A2A job is a required gate, not advisory; it reports 80 passed, 0 failed, 155 skipped,
   30 deselected.
-- **Mutation-proven guards**: 16. One guard is knowingly **not** mutation-proven because it is timing-bound:
-  the 64-connection ceiling, which has a functional saturation test only.
+- **Mutation-proven guards**: each listed guard was removed, a named test went red, and restoring it
+  returned green. The list is in `docs/REVIEW-REQUEST.md`. One guard is knowingly **not** mutation-proven
+  because it is timing-bound: the 64-connection ceiling, which has a functional saturation test only.
 
 ## Blockers, in order of what unblocks the most
 

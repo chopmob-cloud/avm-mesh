@@ -114,6 +114,8 @@ def _serve(args) -> int:
         limits["rate_limit"] = args.rate_limit
     if args.rate_window is not None:
         limits["rate_window_s"] = args.rate_window
+    if args.max_connections is not None:
+        limits["max_connections"] = args.max_connections
     try:
         serve_forever(store, host=args.host, port=args.port, info=info, **limits)
     except MeshError as exc:
@@ -161,6 +163,8 @@ def _build_parser() -> argparse.ArgumentParser:
                    help="requests per client per window (default 120)")
     s.add_argument("--rate-window", type=float, default=None,
                    help="rate-limit window in seconds (default 10)")
+    s.add_argument("--max-connections", type=int, default=None,
+                    help="cap on concurrently open connections (default 64)")
 
     c = sub.add_parser("corroborate",
                        help="ask several witnesses for one receipt and check they agree")

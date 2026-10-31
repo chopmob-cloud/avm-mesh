@@ -22,25 +22,22 @@ import socket
 
 import pytest
 
+import _assets
+
 from avm_mesh.produce import produce
 from avm_mesh.receipt import MeshError, SettlementReceipt
 from avm_mesh.sealed import verify_sealed
 from avm_mesh.service import Store, run_in_thread
 from avm_mesh.trust import TrustPolicy, verify_with_policy
 
-DEFAULT_FIXTURE = (
-    pathlib.Path(__file__).resolve().parents[2]
-    / "avm-proofpack" / "tests" / "fixtures"
-    / "stake_attested_algorand_66457600.json.gz"
-)
+DEFAULT_FIXTURE = _assets.fixture_bundle()
 GENESIS = "wGHE2Pwdvd7S12BL5FaOP20EGYesN73ktiC1qzkkit8="
 
 
 @pytest.fixture(scope="module")
 def real_bundle():
     path = pathlib.Path(os.environ.get("AVM_MESH_FIXTURE", DEFAULT_FIXTURE))
-    if not path.exists():
-        pytest.skip(f"fixture not present at {path}")
+    _assets.require(path, "fixture")
     with gzip.open(path, "rt", encoding="utf-8") as f:
         return json.load(f)
 

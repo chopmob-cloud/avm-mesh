@@ -68,3 +68,36 @@ jobs:
         run: python -m twine check dist/*
       - name: licence and metadata inside the artefacts
         run: python tools/check_artifacts.py dist
+
+
+  a2a-conformance:
+    name: a2a TCK (jsonrpc, must)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: fetch a2a-tck
+        run: git clone --depth 1 https://github.com/chopmob-cloud/a2a-tck.git /tmp/a2a-tck
+      - name: install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install . starlette uvicorn a2a-sdk sse-starlette \
+              grpcio protobuf googleapis-common-protos httpx jsonschema
+      - name: start SUT
+        env:
+          SUT_HOST: localhost:9999
+          GRPC_PORT: "10000"
+        run: |
+          nohup python tools/sut/avm_sut.py > /tmp/sut.log 2>&1 &
+          for i in $(seq 1 20); do
+            curl -fsS http://localhost:9999/.well-known/agent-card.json >/dev/null && break
+            sleep 1
+          done
+          test -s /tmp/sut.log || true
+      - name: run TCK
+        run: |
+          cd /tmp/a2a-tck
+          python run_tck.py --sut-host http://localhost:9999 --level must --transport jsonrpc

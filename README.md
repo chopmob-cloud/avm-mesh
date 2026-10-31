@@ -474,7 +474,7 @@ what the check above is for.
 
 ## Status
 
-**`0.7.0`** — `pip install avm-mesh`.
+**`0.7.1`** — `pip install avm-mesh`.
 
 **361 tests, 0 skipped** in the portable gate, on Python **3.12** (clean-room gate on VM2: offline install from wheels only,
 audit rule A, red team) and Python **3.10.22** (361 passed), so `Requires-Python: >=3.10` is demonstrated

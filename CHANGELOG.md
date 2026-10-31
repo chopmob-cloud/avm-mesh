@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.7.1 — test packaging correction (no runtime change)
+
+The published 0.7.0 sdist carried three tests that call a Falcon-1024 signer.
+`pqcrypto` is not a runtime dependency and its 0.1.0 release has no Linux wheel,
+so a recipient running the sdist suite saw three skips. A skip reads as a pass in
+a summary line, which is precisely the failure mode the clean-room gate exists to
+remove, and shipping an archive whose own gate policy would reject it is wrong
+even when no runtime code is affected.
+
+Those three tests now carry a `signer` marker. The portable gates run
+`-m 'not signer'` and still fail on any real skip; the signing acceptance path is
+run explicitly in a signer-enabled environment and passes there.
+
+Runtime behaviour is unchanged from 0.7.0. No receipt, verification, service or
+CLI semantics were touched.
+
 ## 0.7.0 — anchor derivation + security hardening
 
 **Behaviour change (SSRF hardening):** `avm-mesh corroborate` now refuses to fetch witnesses whose host

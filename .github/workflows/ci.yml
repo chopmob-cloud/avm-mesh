@@ -1,0 +1,67 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: tests (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install . pytest
+      - name: fetch avm-proofpack test assets
+        # Pinned to the commit 0.4.1 shipped from, so the evidence and the Falcon KAT
+        # vectors the suite runs against cannot change underneath us.
+        #
+        # GitHub names the extracted root after the FULL sha even when a short ref is
+        # requested, so the directory is resolved rather than assumed -- guessing it
+        # is what turned this step red on the first attempt.
+        run: |
+          mkdir -p "$RUNNER_TEMP/pp"
+          curl -fsSL \
+            https://github.com/chopmob-cloud/avm-proofpack/archive/c97dcc3.tar.gz \
+            | tar xz -C "$RUNNER_TEMP/pp"
+          PP="$(find "$RUNNER_TEMP/pp" -maxdepth 1 -type d -name 'avm-proofpack-*' | head -1)"
+          if [ -z "$PP" ]; then echo "archive extracted to no known directory"; exit 1; fi
+          for f in "tests/fixtures/stake_attested_algorand_66457600.json.gz" \
+                   "tests/falcon_kat/falcon1024_det_kat.json"; do
+            test -f "$PP/$f" || { echo "missing $f in the pinned archive"; exit 1; }
+            ls -l "$PP/$f"
+          done
+          echo "AVM_PROOFPACK_TESTS=$PP/tests" >> "$GITHUB_ENV"
+      - name: suite
+        # A skip here would mean the crypto paths silently did not run, which is how
+        # a green tick covers 81 fewer tests than the gate. The fixture is required.
+        env:
+          AVM_MESH_REQUIRE_FIXTURE: "1"
+        run: python -m pytest tests -q -rs
+
+  artefacts:
+    name: artefacts (licence + metadata)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: build
+        run: |
+          python -m pip install --upgrade pip build twine
+          python -m build --outdir dist .
+      - name: twine check
+        run: python -m twine check dist/*
+      - name: licence and metadata inside the artefacts
+        run: python tools/check_artifacts.py dist

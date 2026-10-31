@@ -45,3 +45,44 @@ def test_every_command_the_readme_documents_exists_on_the_script():
             choices = set(action.choices or {})
     missing = documented - choices
     assert not missing, f"README documents commands the CLI rejects: {sorted(missing)}"
+
+
+# --- licence and metadata: the estate standard, enforced not remembered ------
+# Memory-graph claims 11229 (licence files normalised estate-wide, PEP 639 SPDX)
+# and 4594 (Apache-2.0 LICENSE + NOTICE in both artifacts). 0.5.0 shipped without
+# either file while declaring the licence, which is why these exist.
+
+def test_licence_files_exist_and_are_real():
+    for name in ("LICENSE", "NOTICE"):
+        path = ROOT / name
+        assert path.exists(), f"{name} missing: the package would declare a licence it does not ship"
+        body = path.read_text(encoding="utf-8")
+        assert len(body) > 200, f"{name} looks like a placeholder"
+    licence = (ROOT / "LICENSE").read_text(encoding="utf-8")
+    assert "Apache License" in licence and "Version 2.0" in licence
+
+
+def test_pyproject_uses_pep639_metadata():
+    body = _pyproject()
+    assert 'license = "Apache-2.0"' in body, "license must be an SPDX string, not a {text=...} table"
+    assert "license-files" in body, "license-files must be declared so the files travel in the artifacts"
+    for name in ("LICENSE", "NOTICE"):
+        assert name in body.split("license-files")[1].split("\n")[0], f"{name} not listed in license-files"
+
+
+def test_no_classifier_contradicts_the_licence_expression():
+    body = _pyproject()
+    offending = [line.strip() for line in body.splitlines()
+                 if line.strip().startswith('"License ::')]
+    assert not offending, f"PEP 639 forbids licence classifiers alongside a licence expression: {offending}"
+
+
+def test_build_requires_a_setuptools_that_understands_pep639():
+    body = _pyproject()
+    match = re.search(r"requires\s*=\s*\[([^\]]*)\]", body)
+    assert match, "no build-system requires"
+    pins = [part.strip().strip('"') for part in match.group(1).split(",") if part.strip()]
+    setuptools_pin = next((p for p in pins if p.startswith("setuptools")), None)
+    assert setuptools_pin, f"setuptools not pinned: {pins}"
+    minimum = int(re.search(r">=\s*(\d+)", setuptools_pin).group(1))
+    assert minimum >= 77, f"setuptools>={minimum} predates PEP 639 support (needs >=77)"

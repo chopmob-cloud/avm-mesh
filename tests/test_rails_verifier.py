@@ -14,14 +14,14 @@ import pathlib
 
 import pytest
 
+import _assets
+
 from avm_mesh.attestation import attest
 from avm_mesh.receipt import MeshError, bundle_digest
 from avm_mesh.rails import verify_rails_receipt
 
 FIXTURE = (
-    pathlib.Path(__file__).resolve().parents[2]
-    / "avm-proofpack" / "tests" / "fixtures"
-    / "stake_attested_algorand_66457600.json.gz"
+    _assets.fixture_bundle()
 )
 GENESIS = "wGHE2Pwdvd7S12BL5FaOP20EGYesN73ktiC1qzkkit8="
 VOI_GENESIS = "r20fSQI8gWe/kFZziNonSPCXLwcQmH/nxROvnnueWOk="
@@ -82,11 +82,9 @@ def test_signature_present_without_a_key_is_reported_unverified():
 def test_signature_with_a_real_key_is_checked_against_the_kat_vector():
     """Uses a genuine Falcon-1024 public key and signature, not a stub."""
     kat = (
-        pathlib.Path(__file__).resolve().parents[2]
-        / "avm-proofpack" / "tests" / "falcon_kat" / "falcon1024_det_kat.json"
+        _assets.falcon_kat()
     )
-    if not kat.exists():
-        pytest.skip("Falcon KAT file not present")
+    _assets.require(kat, "Falcon KAT file")
     vector = json.loads(kat.read_text(encoding="utf-8"))["vectors"][0]
     message = bytes.fromhex(vector["message_hex"])
     pubkey = bytes.fromhex(vector["public_key_hex"])
@@ -123,8 +121,7 @@ def test_non_base64_operator_key_is_refused():
 
 @pytest.fixture(scope="module")
 def bundle():
-    if not FIXTURE.exists():
-        pytest.skip(f"fixture not present at {FIXTURE}")
+    _assets.require(FIXTURE, "fixture")
     with gzip.open(FIXTURE, "rt", encoding="utf-8") as f:
         return json.load(f)
 

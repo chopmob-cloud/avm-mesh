@@ -122,14 +122,28 @@ def _card(base: str, timeout: float) -> dict:
 
 
 def collect(txid: str, witness_urls: list[str], *, min_operators: int = 2,
-            timeout: float = 5.0) -> Corroboration:
-    """Ask each witness for the same receipt and decide whether they agree."""
+            timeout: float = 5.0, hints: dict[str, dict] | None = None) -> Corroboration:
+    """Ask each witness for the same receipt and decide whether they agree.
+
+    ``hints`` carries what a directory *claimed* about each URL. It is used only to
+    catch disagreement with the witness's own card: a directory is a lead, so when
+    the two differ the witness does not count and the reason is reported. It never
+    promotes an entry, and it never supplies an operator identity on its own.
+    """
     if not isinstance(txid, str) or not txid:
         raise MeshError("txid must be a non-empty string")
-    if not witness_urls:
+    if not isinstance(witness_urls, list) or not witness_urls:
         raise MeshError("at least one witness is required")
-    if min_operators < 1:
-        raise MeshError("min_operators must be at least 1")
+    for url in witness_urls:
+        if not isinstance(url, str) or not url.startswith(("http://", "https://")):
+            raise MeshError(f"witness URL must be an http(s) string, got {url!r}")
+    if not isinstance(min_operators, int) or isinstance(min_operators, bool) \
+            or min_operators < 1:
+        raise MeshError("min_operators must be an integer of at least 1")
+    if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or timeout <= 0:
+        raise MeshError("timeout must be a positive number of seconds")
+    if hints is not None and not isinstance(hints, dict):
+        raise MeshError("hints must be a mapping of URL to claimed fields")
 
     result = Corroboration(txid=txid, min_operators=min_operators)
 
@@ -139,6 +153,15 @@ def collect(txid: str, witness_urls: list[str], *, min_operators: int = 2,
             card = _card(url, timeout)
             view.witness_id = card.get("witness_id")
             view.operator_id = card.get("operator_id")
+
+            claimed = (hints or {}).get(url) or {}
+            for field in ("operator_id", "chain"):
+                declared = claimed.get(field)
+                if declared is not None and card.get(field) is not None \
+                        and declared != card.get(field):
+                    raise MeshError(
+                        f"card disagrees with the directory about {field}: "
+                        f"directory says {declared!r}, witness says {card.get(field)!r}")
 
             status, body = _get(f"{url.rstrip('/')}/receipts/{txid}", timeout)
             if status != 200:

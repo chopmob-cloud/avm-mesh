@@ -227,6 +227,12 @@ avm-mesh serve --root ./store --port 8080 \
     --anchor-ln-proven-weight <proven-weight>
 ```
 
+The service is bounded by default: a proofpack over 8 MiB is refused (both at store time and on serve), a
+request path over 2048 characters gets 414, more than 120 requests per client per 10 s gets 429 with
+`Retry-After`, and a connection that stalls mid-request is dropped after 10 s. Operators can tune these with
+`--max-proofpack-bytes`, `--rate-limit` and `--rate-window`. The defaults exist so a witness cannot be used
+as a free amplifier or a slowloris cushion.
+
 The witness card is optional but all-or-nothing: supply some identity flags and not others and it refuses to
 start (exit 3) rather than publish a card that is not what you configured. A witness with no card at all
 serves the store and can never be counted toward corroboration, because an endpoint that will not say who
@@ -238,6 +244,37 @@ Sealing binds the attestation into the hashed bytes:
 from avm_mesh import seal
 receipt = seal({"settlement": {...}, "issuer": "..."}, bundle, "file://proofpack.json")
 ```
+
+### Verify a real mainnet receipt
+
+`examples/` holds a receipt and the proofpack it points at, both from real Algorand mainnet evidence
+(payment `J6FPFF4CKP4XUWUEDLEENV7EV5YDKFZHZJC6UYYWBDVBJLAT7IIA`, round 66457600):
+
+```sh
+avm-mesh verify examples/receipt-66457600.json --evidence examples \
+  --genesis wGHE2Pwdvd7S12BL5FaOP20EGYesN73ktiC1qzkkit8= \
+  --voters-commitment 71Oh0YaxEA59JIgWUjMmnpz0KG8lWJ2jwXQiTYxp15FulxCMNfHfBMHT/8hyTNv2tMdWZl+YOz8go5DczFfuLw== \
+  --ln-proven-weight 2230418
+```
+
+```
+integrity:   PASS
+signature:   None
+consensus:   stake_attested
+trust root:  stake_attested
+attested:    J6FPFF4CKP4XUWUEDLEENV7EV5YDKFZHZJC6UYYWBDVBJLAT7IIA @ round 66457600
+```
+
+**What that proves, precisely.** The Falcon signatures, reveal membership, signed weight and coin selection
+over that bundle are verified, and you can re-verify them yourself. What is *not* established independently
+is the anchor: those two values come from the bundle's own previous state-proof message, because that is all
+the artifact carries. A production verifier takes them from a pinned genesis bootstrap or a chain walk that
+starts in something it already trusts — that is the step this example cannot do for you, and a receipt
+reaching `stake_attested` against a self-derived anchor is a worked example of the mechanics, not proof that
+Algorand's consensus signed anything you did not already have.
+
+Remove both anchor flags and the same command fails closed. That is deliberate: the tier is never reached
+from the bundle's own word.
 
 ## A2A: settlement evidence between agents
 
@@ -342,6 +379,27 @@ AGREED on proofpack 8f14e45fceea167a5a36dedd4bea2543...
 
 Exit codes: `0` agreed, `2` not agreed, `3` bad arguments. `--json` emits the full report.
 
+Instead of listing URLs by hand, point it at a published directory:
+
+```sh
+avm-mesh corroborate --txid TH2WRFV... --directory ./mesh-directory.json --min-operators 2
+```
+
+```json
+{
+  "version": 1,
+  "witnesses": [
+    {"url": "https://w1.example.org", "operator_id": "op-a", "chain": "mainnet-v1.0"},
+    {"url": "https://w2.example.net", "operator_id": "op-b", "chain": "mainnet-v1.0"}
+  ]
+}
+```
+
+**A directory is a lead, not a trust root.** Each entry is checked against the witness's own card at
+collection time, and a directory that disagrees with a card loses: that witness does not count and the
+disagreement is reported. Unknown fields, duplicate URLs, a wrong document version or a non-http URL are
+refused outright, because a directory arrives over the network.
+
 What counts, and what deliberately does not:
 
 - **A witness counts only if it publishes an `operator_id`.** Two URLs on one operator are one voice, and
@@ -361,7 +419,19 @@ what the check above is for.
 
 ## Status
 
-**`0.5.0`, published on PyPI** — `pip install avm-mesh`. **245 tests, 0 skipped**, validated in a fresh
+**`0.6.0`** — `pip install avm-mesh`.
+
+**296 tests, 0 skipped**, on both Python **3.12** (clean-room gate on VM2: offline install from wheels only,
+audit rule A, red team) and Python **3.10.22** (296 passed), so `Requires-Python: >=3.10` is now demonstrated
+rather than asserted.
+
+Licence: Apache-2.0 with `LICENSE` and `NOTICE` in the repository, the wheel and the sdist, PEP 639
+`License-Expression` metadata, no contradicting classifier — checked inside the built artefacts by
+`tools/check_artifacts.py` and in CI. 0.5.0 shipped without either licence file; that is why this gate exists.
+
+Security surface: `tests/test_validation.py` attacks every input path added in 0.6.0 (directory size, nesting,
+field types, argument types, service configuration, CLI failure modes). Each guard was mutation-checked — one
+of them was silently unpinned until the check exposed it., validated in a fresh
 VM2 clean-room container that installs from the built wheels offline and runs against site-packages.
 
 | Piece | State |
@@ -370,6 +440,9 @@ VM2 clean-room container that installs from the built wheels offline and runs ag
 | Witness service (`serve`), content-addressed store, append-only receipts | shipped |
 | LEVEL 3 consensus attestation, anchor-required | shipped |
 | Corroboration across witnesses (`corroborate`) | shipped 0.5.0 |
+| Witness discovery (`--directory`, `/.well-known/mesh-directory.json`) | shipped 0.6.0 |
+| Worked mainnet example (`examples/`) | shipped 0.6.0 |
+| Service resource bounds (size cap, rate limit, slowloris timeout) | shipped 0.6.0 |
 | A2A settlement-evidence extension (v1.0 wire format) | shipped; parsed by `a2a-sdk` 1.3.0 |
 | Rails adoption kit (`avm_mesh.rails`) | shipped; **not round-tripped** against a real rails receipt |
 | Witness bonding (`bond.py`) | model only — **no on-chain escrow**, see Honest limits |

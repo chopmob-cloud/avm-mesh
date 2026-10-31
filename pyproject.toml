@@ -1,20 +1,22 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "avm-mesh"
-version = "0.5.0"
+version = "0.6.0"
 description = "Settlement receipts for the AVM mesh: digest-and-pointer evidence that resolves to a verifiable proofpack"
 readme = "README.md"
 requires-python = ">=3.10"
-license = {text = "Apache-2.0"}
+# PEP 639: an SPDX expression plus explicit licence files. The estate standard
+# (memory-graph claims 11229, 4594): licence text must travel in both artifacts.
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
 authors = [{name = "AlgoVoi", email = "chopmob@gmail.com"}]
 keywords = ["algorand", "voi", "avm", "state-proof", "settlement", "a2a", "x402", "falcon"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
     "Topic :: Security :: Cryptography",

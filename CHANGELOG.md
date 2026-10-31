@@ -1,5 +1,53 @@
 # Changelog
 
+## 0.6.0 — replaces 0.5.0
+
+### Fixed — 0.5.0 declared a licence it did not ship
+
+`avm-mesh` stated Apache-2.0 through the deprecated `license = {text = ...}` form and shipped **no `LICENSE`
+and no `NOTICE`** — not in the repository, the wheel, or the sdist. That contradicts the estate decision
+(memory-graph claims 11229 and 4594: licence files normalised estate-wide, PEP 639 SPDX, Apache-2.0 LICENSE
+and NOTICE in both artifacts) which `avm-proofpack` already follows.
+
+Now: `license = "Apache-2.0"` with `license-files = ["LICENSE", "NOTICE"]`, both files in the repository,
+`setuptools>=77` so the metadata is actually understood, and no `License ::` classifier contradicting the
+expression. `tools/check_artifacts.py` inspects the **built** wheel and sdist for the files and the
+`License-Expression`, and CI runs it on every push.
+
+### Added — CI, including the Python floor that was only asserted
+
+`Requires-Python: >=3.10` had never been executed. `.github/workflows/ci.yml` runs the suite on 3.10 and
+3.12 and checks artefacts separately. `avm-mesh` previously had no CI at all while its dependency did.
+
+### Added — witness discovery
+
+`avm-mesh corroborate --directory <url-or-path>` reads a published directory document
+(`{"version": 1, "witnesses": [...]}`), and `/.well-known/mesh-directory.json` is the conventional location.
+A directory is a lead and never a trust root: each entry is checked against the witness's own card, and a
+mismatch means that witness does not count and the disagreement is named. Unknown fields, duplicate URLs,
+wrong versions and non-http URLs are refused.
+
+### Added — service resource bounds
+
+The witness service had no limits. Now: proofpacks over 8 MiB refused at store *and* on serve, request paths
+over 2048 characters get 414, over 120 requests per client per 10 s gets 429 with `Retry-After`, and a stalled
+connection is dropped after 10 s. Tunable via `--max-proofpack-bytes`, `--rate-limit`, `--rate-window`.
+
+### Added — a worked example, with its limits stated
+
+`examples/` carries a receipt and the mainnet proofpack it points at (round 66457600),
+`tools/make_example.py` regenerates them, and `tests/test_example.py` fails if the committed pair stops
+verifying. The README prints the exact command and says what it does **not** establish: the anchor is derived
+from the bundle's own previous message, so the tier's mechanics are demonstrated with real data while
+independence of that anchor is not claimed.
+
+### Process note
+
+0.4.2, 0.4.3 and 0.5.0 were published in one session without consulting the memory graph for the packaging
+standard. 0.4.2 shipped without a console script and with a documented-but-unimplemented `serve`. Publishing
+is irreversible; the graph check costs one command. `docs/RELEASE-CRITERIA.md` now lists what must be true
+before the next upload.
+
 ## 0.5.0
 
 ### Added — `avm-mesh corroborate`: the mesh actually checking itself

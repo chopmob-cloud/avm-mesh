@@ -99,3 +99,29 @@ fabricated trust claim.
   conformance.
 - Serving the extension needs an `a2a-sdk` agent plus a trusted-voters anchor, on a host that can reach the
   evidence. That is the next step, and it is a build rather than a check.
+
+## 5. Update, 2026-11-01 — our SUT is now a required CI gate, and it found a real defect
+
+The run above (`§2`, 5 failed) was all transports against the reference SUT. Running ours on `a2a-sdk`
+1.3.0 at `--transport jsonrpc --level must`, and then wiring the same thing into CI, produced a different
+and better outcome — and one defect:
+
+| Run | Result |
+|---|---|
+| local, our SUT, jsonrpc/must, before fix | 79 passed, 0 failed* |
+| CI, our SUT, jsonrpc/must, before fix | **1 failed**, 79 passed, 155 skipped |
+| local, after the content-type fix | **80 passed, 0 failed** |
+| CI (`9dab2cd`), after the fix | green — `a2a TCK (jsonrpc, must) => success` |
+
+\* the local run and CI disagreed about one test (their skip counts differ by one). CI reproduced the
+failure, so CI is where the fix is evidenced, not the local run.
+
+The defect: **JSONRPC-SSE-002**. A request with `Content-Type: text/plain` reached the SDK's JSON parser
+and returned `ParseError (-32700)` rather than `ContentTypeNotSupportedError (-32005)`. A wrong media type
+is an HTTP-level condition, so `tools/sut/avm_sut.py` now answers `415` with the A2A JSON-RPC error body
+before the parser sees the bytes. That was a defect in the *SUT*, not in the extension: the receipt path
+was never involved.
+
+**`a2a-conformance` is now a required CI job.** On `bf0af17` it passed with the gate on, and the run shows
+`a2a TCK (jsonrpc, must) => success`. This is protocol conformance for the transports we claim, nothing
+more: the TCK still tests no extension semantics (§4).

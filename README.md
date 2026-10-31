@@ -500,18 +500,20 @@ VM2 clean-room container that installs from the built wheels offline and runs ag
 | Witness discovery (`--directory`, `/.well-known/mesh-directory.json`) | shipped 0.6.0 |
 | Worked mainnet example (`examples/`) | shipped 0.6.0 |
 | Service resource bounds (size cap, rate limit, slowloris timeout) | shipped 0.6.0 |
-| A2A settlement-evidence extension (v1.0 wire format) | shipped; parsed by `a2a-sdk` 1.3.0 |
+| A2A settlement-evidence extension (v1.0 wire format) | shipped; parsed by `a2a-sdk` 1.3.0; TCK `must`/jsonrpc is a **required CI gate** (80 passed, 0 failed) |
 | Rails adoption kit (`avm_mesh.rails`) | shipped; **not round-tripped** against a real rails receipt |
 | Witness bonding (`bond.py`) | model only — **no on-chain escrow**, see Honest limits |
 
 **Dependency:** `avm-proofpack>=0.4.1`, where `stake_attested` became anchor-required. LEVEL 3 never
 authenticates from a bundle's own `previous_message`, in any version after 0.1.0.
 
-**A2A conformance, precisely:** the TCK runs on this estate (183 passed / 5 failed / 47 skipped at `must`
-level against the reference SUT), but those five failures are the reference SUT's own and **no extension
-requirements exist in the TCK** (no `EXT-*` ids). So a green TCK run cannot validate extension semantics;
-what is proven is that our artifact parses in the reference SDK and that advertising the extension costs
-zero protocol conformance. See `docs/A2A-CONFORMANCE.md`.
+**A2A conformance, precisely:** our own SUT now runs the TCK at `--level must --transport jsonrpc` as a
+**required CI job** — 80 passed, 0 failed — after the job found and we fixed one real defect in the SUT
+(a `text/plain` body returned `ParseError -32700` instead of `ContentTypeNotSupportedError -32005`; it now
+answers HTTP 415 before the parser). That is protocol conformance for the transport we claim. It is **not**
+extension validation: the TCK contains no extension requirements (no `EXT-*` ids), so a green run cannot
+prove the extension's own semantics — only that carrying it breaks nothing. See
+`docs/A2A-CONFORMANCE.md`.
 
 ## Honest limits
 

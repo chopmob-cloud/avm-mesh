@@ -12,12 +12,16 @@ DEFAULT_FIXTURE = (
     / "avm-proofpack" / "tests" / "fixtures"
     / "stake_attested_algorand_66457600.json.gz"
 )
+
+
+from _assets import fixture_bundle  # noqa: E402 - sibling test module
 GENESIS = "wGHE2Pwdvd7S12BL5FaOP20EGYesN73ktiC1qzkkit8="
 
 
 @pytest.fixture(scope="session")
 def bundle():
-    path = pathlib.Path(os.environ.get("AVM_MESH_FIXTURE", DEFAULT_FIXTURE))
+    explicit = os.environ.get("AVM_MESH_FIXTURE")
+    path = pathlib.Path(explicit) if explicit else fixture_bundle()
     if not path.exists():
         # A missing fixture is normally a skip for a developer who has not cloned
         # the sibling repo. In a gate it must be a failure: "215 passed, 81 skipped"

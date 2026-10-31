@@ -22,18 +22,20 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install . pytest
-      - name: fetch the mainnet fixture
-        # Pinned to the avm-proofpack commit that 0.4.1 shipped from, so the evidence
-        # the suite runs against cannot change underneath us.
+      - name: fetch avm-proofpack test assets
+        # Pinned to the commit 0.4.1 shipped from, so the evidence and the Falcon KAT
+        # vectors the suite runs against cannot change underneath us.
         run: |
-          curl -fsSL -o "$RUNNER_TEMP/fixture.json.gz" \
-            https://raw.githubusercontent.com/chopmob-cloud/avm-proofpack/c97dcc3/tests/fixtures/stake_attested_algorand_66457600.json.gz
-          ls -l "$RUNNER_TEMP/fixture.json.gz"
+          curl -fsSL \
+            https://github.com/chopmob-cloud/avm-proofpack/archive/c97dcc3.tar.gz \
+            | tar xz -C "$RUNNER_TEMP"
+          ls -l "$RUNNER_TEMP"/avm-proofpack-c97dcc3/tests/fixtures/stake_attested_algorand_66457600.json.gz \
+                "$RUNNER_TEMP"/avm-proofpack-c97dcc3/tests/falcon_kat/falcon1024_det_kat.json
       - name: suite
         # A skip here would mean the crypto paths silently did not run, which is how
         # a green tick covers 81 fewer tests than the gate. The fixture is required.
         env:
-          AVM_MESH_FIXTURE: ${{ runner.temp }}/fixture.json.gz
+          AVM_PROOFPACK_TESTS: ${{ runner.temp }}/avm-proofpack-c97dcc3/tests
           AVM_MESH_REQUIRE_FIXTURE: "1"
         run: python -m pytest tests -q -rs
 

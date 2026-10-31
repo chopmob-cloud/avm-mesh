@@ -29,18 +29,18 @@ import pathlib
 
 import pytest
 
+import _assets
+
 from avm_mesh.cli import _make_signature_verifier
 
 KAT = (
-    pathlib.Path(__file__).resolve().parents[2]
-    / "avm-proofpack" / "tests" / "falcon_kat" / "falcon1024_det_kat.json"
+    _assets.falcon_kat()
 )
 
 
 @pytest.fixture(scope="module")
 def kat_vectors():
-    if not KAT.exists():
-        pytest.skip(f"Falcon KAT file not present at {KAT}")
+    _assets.require(KAT, "Falcon KAT file")
     data = json.loads(KAT.read_text(encoding="utf-8"))
     return [
         (

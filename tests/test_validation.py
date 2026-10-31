@@ -38,6 +38,7 @@ def test_oversized_body_without_content_length_is_refused(monkeypatch):
     declared, so the guard that matters is the one on the bytes actually read.
     """
     class FakeResponse:
+        status = 200
         headers: dict = {}
 
         def read(self, size: int = -1) -> bytes:
@@ -49,8 +50,15 @@ def test_oversized_body_without_content_length_is_refused(monkeypatch):
         def __exit__(self, *exc) -> bool:
             return False
 
-    monkeypatch.setattr("urllib.request.urlopen", lambda *a, **k: FakeResponse())
-    with pytest.raises(MeshError, match="too large"):
+    class FakeOpener:
+        def open(self, url, timeout=None):
+            return FakeResponse()
+
+    # The fetch now goes through the address guard, so stub that too -- otherwise the
+    # test measures DNS resolution of a .invalid host instead of the size cap.
+    monkeypatch.setattr("avm_mesh.net._check_url", lambda *a, **k: None)
+    monkeypatch.setattr("urllib.request.build_opener", lambda *a, **k: FakeOpener())
+    with pytest.raises(MeshError, match="too large|more than the"):
         load_directory("https://example.invalid/dir.json")
 
 

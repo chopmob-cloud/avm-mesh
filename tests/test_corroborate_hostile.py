@@ -76,15 +76,15 @@ def honest():
     w.close()
 
 
-def _collect(urls, min_operators=2):
-    return collect(TXID, urls, min_operators=min_operators, timeout=5)
+def _collect(urls, min_operators=2, allow_private=True):
+    return collect(TXID, urls, min_operators=min_operators, timeout=5, allow_private=True)
 
 
 def test_an_unhashable_operator_id_does_not_crash_the_collection(honest):
     """A list operator_id previously raised TypeError from a set() outside the guard."""
     bad = FakeWitness(card_override={"witness_id": "w", "operator_id": [], "chain": "mainnet-v1.0"})
     try:
-        result = _collect([honest.url, bad.url])
+        result = _collect([honest.url, bad.url], allow_private=True)
         assert result.agreed is False
         offender = [v for v in result.views if v.url == bad.url][0]
         assert offender.problem and "non-empty string" in offender.problem
@@ -96,7 +96,7 @@ def test_an_unhashable_operator_id_does_not_crash_the_collection(honest):
 def test_an_empty_operator_id_cannot_satisfy_the_threshold(honest):
     bad = FakeWitness(card_override={"witness_id": "w", "operator_id": "", "chain": "mainnet-v1.0"})
     try:
-        result = _collect([honest.url, bad.url])
+        result = _collect([honest.url, bad.url], allow_private=True)
         assert result.agreed is False
         assert result.operators == ("op-honest",)
     finally:
@@ -106,7 +106,7 @@ def test_an_empty_operator_id_cannot_satisfy_the_threshold(honest):
 def test_a_deeply_nested_card_is_reported_not_raised(honest):
     bad = FakeWitness(raw_card=b"[" * 100_000 + b"]" * 100_000)
     try:
-        result = _collect([honest.url, bad.url])
+        result = _collect([honest.url, bad.url], allow_private=True)
         offender = [v for v in result.views if v.url == bad.url][0]
         assert offender.problem
         assert not offender.counts
@@ -120,7 +120,7 @@ def test_an_oversized_card_is_refused(honest):
                        "chain": "mainnet-v1.0", "pad": "x" * (200_000)}).encode()
     bad = FakeWitness(raw_card=blob)
     try:
-        result = _collect([honest.url, bad.url])
+        result = _collect([honest.url, bad.url], allow_private=True)
         offender = [v for v in result.views if v.url == bad.url][0]
         assert offender.problem and "limit" in offender.problem
         assert not offender.counts
@@ -132,7 +132,7 @@ def test_witnesses_on_different_chains_do_not_agree(honest):
     """Same digest, same round, same tier -- but not the same chain."""
     other = FakeWitness(operator="op-b", chain="voimain-v1.0")
     try:
-        result = _collect([honest.url, other.url])
+        result = _collect([honest.url, other.url], allow_private=True)
         assert result.agreed is False
         assert any("chain" in p for p in result.problems)
     finally:
@@ -143,7 +143,7 @@ def test_a_card_that_contradicts_its_own_receipt_is_not_counted(honest):
     contradictory = FakeWitness(operator="op-b", chain="mainnet-v1.0",
                                receipt_chain="voimain-v1.0")
     try:
-        result = _collect([honest.url, contradictory.url])
+        result = _collect([honest.url, contradictory.url], allow_private=True)
         offender = [v for v in result.views if v.url == contradictory.url][0]
         assert offender.problem and "card claims chain" in offender.problem
         assert not offender.counts

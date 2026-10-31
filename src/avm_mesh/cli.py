@@ -172,6 +172,9 @@ def _build_parser() -> argparse.ArgumentParser:
     c.add_argument("--min-operators", type=int, default=2,
                    help="independent operators required (default 2)")
     c.add_argument("--timeout", type=float, default=5.0)
+    c.add_argument("--allow-private", action="store_true",
+                   help="allow witnesses on private/loopback addresses (local testing only; "
+                        "by default a fetched document cannot point you at an internal host)")
     c.add_argument("--json", action="store_true")
 
     a = sub.add_parser("anchor",
@@ -228,7 +231,8 @@ def _corroborate(args) -> int:
     hints: dict[str, dict] = {}
     try:
         for source in args.directory or []:
-            entries = load_directory(source, timeout=args.timeout)
+            entries = load_directory(source, timeout=args.timeout,
+                                     allow_private=args.allow_private)
             for entry in entries:
                 url = entry["url"]
                 if url not in urls:
@@ -238,7 +242,8 @@ def _corroborate(args) -> int:
             print("corroborate needs --witness or --directory", file=sys.stderr)
             return 3
         result = collect(args.txid, urls, min_operators=args.min_operators,
-                         timeout=args.timeout, hints=hints)
+                         timeout=args.timeout, hints=hints,
+                         allow_private=args.allow_private)
     except MeshError as exc:
         print(f"cannot corroborate: {exc}", file=sys.stderr)
         return 3

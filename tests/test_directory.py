@@ -91,9 +91,16 @@ def test_missing_file_is_refused(tmp_path):
         load_directory(str(tmp_path / "absent.json"))
 
 
-def test_unreachable_directory_is_refused():
-    with pytest.raises(MeshError, match="cannot reach directory"):
+def test_a_loopback_directory_is_refused_by_the_address_guard():
+    """New behaviour: loopback is refused before a connection is attempted."""
+    with pytest.raises(MeshError, match="not a public address"):
         load_directory("http://127.0.0.1:1/dir.json", timeout=1)
+
+
+def test_an_unreachable_directory_is_refused_once_the_guard_is_opted_out_of():
+    """The original behaviour, reachable only when loopback is explicitly allowed."""
+    with pytest.raises(MeshError, match="cannot reach"):
+        load_directory("http://127.0.0.1:1/dir.json", timeout=1, allow_private=True)
 
 
 def test_urls_are_deduplicated_in_order():
@@ -106,7 +113,7 @@ def test_directory_hint_matching_the_card_is_accepted(tmp_path):
     b = _witness(tmp_path, "w-b", "op-b")
     hints = {a: {"operator_id": "op-a", "chain": "mainnet-v1.0"},
              b: {"operator_id": "op-b", "chain": "mainnet-v1.0"}}
-    result = collect("DIRTEST", [a, b], min_operators=2, hints=hints)
+    result = collect("DIRTEST", [a, b], min_operators=2, hints=hints, allow_private=True)
     assert result.agreed, result.problems
 
 
@@ -115,7 +122,7 @@ def test_directory_claiming_the_wrong_operator_does_not_promote_the_witness(tmp_
     a = _witness(tmp_path, "w-a", "op-a")
     b = _witness(tmp_path, "w-a2", "op-a")
     hints = {a: {"operator_id": "op-a"}, b: {"operator_id": "op-b"}}
-    result = collect("DIRTEST", [a, b], min_operators=2, hints=hints)
+    result = collect("DIRTEST", [a, b], min_operators=2, hints=hints, allow_private=True)
     assert not result.agreed
     bad = [v for v in result.views if v.url == b][0]
     assert "disagrees with the directory" in (bad.problem or "")
@@ -131,8 +138,8 @@ def test_cli_accepts_a_directory(tmp_path):
     directory.write_text(json.dumps(_doc({"url": a}, {"url": b})), encoding="utf-8")
 
     proc = subprocess.run([sys.executable, "-m", "avm_mesh", "corroborate",
-                           "--txid", "DIRTEST", "--directory", str(directory),
-                           "--min-operators", "2"], capture_output=True, text=True)
+                           "--txid", "DIRTEST", "--directory", str(directory), "--allow-private",
+                           "--min-operators", "2", "--allow-private"], capture_output=True, text=True)
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert "AGREED" in proc.stdout
 

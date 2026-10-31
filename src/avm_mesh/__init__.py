@@ -5,6 +5,7 @@ a pointer to a proofpack, and the trust tier that proofpack actually earned.
 The bundle itself is stored once per attested interval, never per transaction.
 """
 
+from .anchor import AnchorWalk, walk
 from .corroborate import Corroboration, collect
 from .attestation import ConsensusAttestation, attest, verify_attestation
 from .effects import verify_settlement_amount
@@ -44,4 +45,4 @@ __all__ = [
     "create_receipt",
     "verify_receipt",
 ]
-__version__ = "0.6.0"
+__version__ = "0.7.0"

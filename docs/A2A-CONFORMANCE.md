@@ -93,10 +93,13 @@ fabricated trust claim.
 
 - **No extension *semantic* validation, and none is possible with this TCK.** The A/B above proves our
   presence breaks nothing; it cannot prove the extension's own rules, because the TCK does not test them.
-- **The TCK has no extension-payload requirements.** Grepping `tests/compatibility` for `EXT-*` returns
-  nothing; extensions appear only in `ExtensionSupportRequiredError` handling. A green TCK run therefore
-  cannot validate extension *semantics* — at most it would show our presence does not break protocol
-  conformance.
+- **The TCK has no requirements for extension payload semantics.** Grepping `tests/compatibility` for `EXT`
+  does return ids, and saying "no `EXT-*` ids" was wrong: `CARD-EXT-001` and `CARD-EXT-002` cover retrieving
+  an *extended agent card* and the `ExtendedAgentCardNotConfiguredError`, and `EXTENSION_SUPPORT_REQUIRED`
+  covers refusing a call that requires an extension the agent does not support. None of them constructs a
+  message, reads a payload, or checks what a third-party extension carries. A green TCK run therefore proves
+  protocol conformance and that advertising our extension breaks nothing; it cannot validate the extension's
+  own rules, because no requirement describes them.
 - Serving the extension needs an `a2a-sdk` agent plus a trusted-voters anchor, on a host that can reach the
   evidence. That is the next step, and it is a build rather than a check.
 

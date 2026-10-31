@@ -512,8 +512,10 @@ authenticates from a bundle's own `previous_message`, in any version after 0.1.0
 **required CI job** — 80 passed, 0 failed — after the job found and we fixed one real defect in the SUT
 (a `text/plain` body returned `ParseError -32700` instead of `ContentTypeNotSupportedError -32005`; it now
 answers HTTP 415 before the parser). That is protocol conformance for the transport we claim. It is **not**
-extension validation: the TCK contains no extension requirements (no `EXT-*` ids), so a green run cannot
-prove the extension's own semantics — only that carrying it breaks nothing. See
+extension validation: the TCK's extension-related requirements (`CARD-EXT-001`, `CARD-EXT-002`,
+`EXTENSION_SUPPORT_REQUIRED`) cover extended agent card retrieval and the refusal of an unsupported required
+extension, and none of them constructs, carries or inspects a third-party extension payload. A green run
+therefore cannot validate the extension's own semantics, only that carrying it breaks nothing. See
 `docs/A2A-CONFORMANCE.md`.
 
 ## Honest limits

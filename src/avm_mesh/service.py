@@ -21,6 +21,8 @@ from __future__ import annotations
 import hashlib
 import json
 import pathlib
+import threading
+import time
 import re
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -32,6 +34,18 @@ from .receipt import MeshError, SettlementReceipt, bundle_digest
 # separator, a dot-segment or a NUL would let a request walk out of the store
 # and read or write an arbitrary file: the courier must not pick the bytes.
 _SAFE_NAME = re.compile(r"\A[A-Za-z0-9_-]{1,128}\Z")
+
+
+#: A witness refuses to serve a proofpack larger than this. Real ones are ~0.4-0.9 MB;
+#: the cap exists so a hostile or broken store cannot make a witness stream gigabytes.
+DEFAULT_MAX_PROOF_BYTES = 8 * 1024 * 1024
+#: Requests per client address per window, and the window length.
+DEFAULT_RATE_LIMIT = 120
+DEFAULT_RATE_WINDOW_S = 10.0
+#: A client that does not send a full request within this many seconds is dropped.
+SOCKET_TIMEOUT_S = 10.0
+#: Longest request line accepted. Anything longer is not a resource we serve.
+MAX_PATH_CHARS = 2048
 
 
 class StoreNameError(MeshError):
@@ -72,7 +86,12 @@ def _within_store(base: pathlib.Path, path: pathlib.Path) -> None:
 class Store:
     """Filesystem store: proofpacks by digest, receipts by txid."""
 
-    def __init__(self, root: pathlib.Path | str) -> None:
+    def __init__(self, root: pathlib.Path | str,
+                 max_proofpack_bytes: int = DEFAULT_MAX_PROOF_BYTES) -> None:
+        if not isinstance(max_proofpack_bytes, int) or isinstance(max_proofpack_bytes, bool) \
+                or max_proofpack_bytes <= 0:
+            raise MeshError("max_proofpack_bytes must be a positive integer")
+        self.max_proofpack_bytes = max_proofpack_bytes
         self.root = pathlib.Path(root)
         self.proofpacks = self.root / "proofpacks"
         self.receipts = self.root / "receipts"
@@ -88,6 +107,11 @@ class Store:
     # -- writes ---------------------------------------------------------
     def put_proofpack(self, bundle: dict) -> str:
         digest = bundle_digest(bundle)
+        encoded_len = len(json.dumps(bundle).encode("utf-8"))
+        if encoded_len > self.max_proofpack_bytes:
+            raise MeshError(
+                f"proofpack is {encoded_len} bytes, over the {self.max_proofpack_bytes} "
+                "byte limit this witness serves")
         path = self.proofpacks / f"{digest}.json"
         if path.exists():
             # Content-addressed: an existing file with this name is the same bytes.
@@ -211,9 +235,40 @@ class WitnessInfo:
         }
 
 
-def _make_handler(store: Store, info: WitnessInfo | None):
+def _make_handler(store: Store, info: WitnessInfo | None,
+                  rate_limit: int = DEFAULT_RATE_LIMIT,
+                  rate_window_s: float = DEFAULT_RATE_WINDOW_S):
+    if not isinstance(rate_limit, int) or isinstance(rate_limit, bool) or rate_limit <= 0:
+        raise MeshError("rate_limit must be a positive integer")
+    if not isinstance(rate_window_s, (int, float)) or isinstance(rate_window_s, bool) \
+            or rate_window_s <= 0:
+        raise MeshError("rate_window_s must be a positive number of seconds")
+    # Shared across handler instances: one counter per client address.
+    seen: dict[str, tuple[float, int]] = {}
+    seen_lock = threading.Lock()
+
+    def rate_limited(address: str) -> bool:
+        now = time.monotonic()
+        with seen_lock:
+            if len(seen) > 10_000:
+                # Drop windows that have already expired. Without this the table is a
+                # memory sink for anyone able to source requests from many addresses.
+                for key in [k for k, (start, _) in seen.items()
+                            if now - start >= rate_window_s]:
+                    del seen[key]
+            window_start, count = seen.get(address, (now, 0))
+            if now - window_start >= rate_window_s:
+                seen[address] = (now, 1)
+                return False
+            if count >= rate_limit:
+                return True
+            seen[address] = (window_start, count + 1)
+            return False
+
     class Handler(BaseHTTPRequestHandler):
-        server_version = "avm-mesh-witness/0.1"
+        server_version = "avm-mesh-witness/0.2"
+        # Drop a connection that goes quiet mid-request rather than holding a thread.
+        timeout = SOCKET_TIMEOUT_S
 
         def _json(self, code: int, payload: Any) -> None:
             body = json.dumps(payload).encode("utf-8")
@@ -224,6 +279,18 @@ def _make_handler(store: Store, info: WitnessInfo | None):
             self.wfile.write(body)
 
         def do_GET(self) -> None:  # noqa: N802 - http.server API
+            if len(self.path) > MAX_PATH_CHARS:
+                return self._json(414, {"error": "request path too long"})
+            client = self.client_address[0] if self.client_address else "unknown"
+            if rate_limited(client):
+                self.send_response(429)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Retry-After", str(int(rate_window_s)))
+                body = json.dumps({"error": "rate limit exceeded"}).encode()
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
             path = self.path.split("?", 1)[0].rstrip("/")
             try:
                 if path in ("/healthz", ""):
@@ -239,6 +306,10 @@ def _make_handler(store: Store, info: WitnessInfo | None):
                     digest = path[len("/proofpacks/"):]
                     if digest.endswith(".json"):
                         digest = digest[:-5]
+                    _safe_name(digest, "digest")
+                    stored = store.proofpacks / f"{digest}.json"
+                    if stored.exists() and stored.stat().st_size > store.max_proofpack_bytes:
+                        return self._json(413, {"error": "proofpack too large to serve"})
                     return self._json(200, store.get_proofpack(digest))
             except FileNotFoundError:
                 return self._json(404, {"error": "not found"})
@@ -260,15 +331,18 @@ def _make_handler(store: Store, info: WitnessInfo | None):
 
 
 def make_server(store: Store, host: str = "127.0.0.1", port: int = 0,
-                info: WitnessInfo | None = None) -> ThreadingHTTPServer:
-    server = ThreadingHTTPServer((host, port), _make_handler(store, info))
+                info: WitnessInfo | None = None, *,
+                rate_limit: int = DEFAULT_RATE_LIMIT,
+                rate_window_s: float = DEFAULT_RATE_WINDOW_S) -> ThreadingHTTPServer:
+    server = ThreadingHTTPServer(
+        (host, port), _make_handler(store, info, rate_limit, rate_window_s))
     server.daemon_threads = True
     return server
 
 
 def serve_forever(store: Store, host: str = "127.0.0.1", port: int = 8080,
-                  info: WitnessInfo | None = None) -> None:
-    server = make_server(store, host, port, info)
+                  info: WitnessInfo | None = None, **limits: Any) -> None:
+    server = make_server(store, host, port, info, **limits)
     try:
         server.serve_forever()
     finally:

@@ -70,7 +70,8 @@ def _serve(args) -> int:
     from .service import Store, WitnessInfo, serve_forever
 
     try:
-        store = Store(args.root)
+        store = (Store(args.root, max_proofpack_bytes=args.max_proofpack_bytes)
+                 if args.max_proofpack_bytes else Store(args.root))
     except MeshError as exc:
         print(f"cannot open store at {args.root}: {exc}", file=sys.stderr)
         return 3
@@ -100,8 +101,16 @@ def _serve(args) -> int:
             return 3
 
     print(f"serving store {args.root} on http://{args.host}:{args.port}", file=sys.stderr)
+    limits = {}
+    if args.rate_limit is not None:
+        limits["rate_limit"] = args.rate_limit
+    if args.rate_window is not None:
+        limits["rate_window_s"] = args.rate_window
     try:
-        serve_forever(store, host=args.host, port=args.port, info=info)
+        serve_forever(store, host=args.host, port=args.port, info=info, **limits)
+    except MeshError as exc:
+        print(f"invalid service configuration: {exc}", file=sys.stderr)
+        return 3
     except OSError as exc:
         print(f"cannot bind {args.host}:{args.port}: {exc}", file=sys.stderr)
         return 3
@@ -138,12 +147,20 @@ def _build_parser() -> argparse.ArgumentParser:
     s.add_argument("--escrow-txid", default=None)
     s.add_argument("--anchor-voters-commitment-b64", default=None)
     s.add_argument("--anchor-ln-proven-weight", type=int, default=None)
+    s.add_argument("--max-proofpack-bytes", type=int, default=None,
+                   help="refuse to store or serve a proofpack larger than this")
+    s.add_argument("--rate-limit", type=int, default=None,
+                   help="requests per client per window (default 120)")
+    s.add_argument("--rate-window", type=float, default=None,
+                   help="rate-limit window in seconds (default 10)")
 
     c = sub.add_parser("corroborate",
                        help="ask several witnesses for one receipt and check they agree")
     c.add_argument("--txid", required=True)
-    c.add_argument("--witness", action="append", required=True, metavar="URL",
+    c.add_argument("--witness", action="append", metavar="URL",
                    help="witness base URL; repeat for each witness")
+    c.add_argument("--directory", action="append", metavar="URL_OR_PATH",
+                   help="mesh directory document, http(s) or a local path; repeatable")
     c.add_argument("--min-operators", type=int, default=2,
                    help="independent operators required (default 2)")
     c.add_argument("--timeout", type=float, default=5.0)
@@ -155,10 +172,23 @@ def _build_parser() -> argparse.ArgumentParser:
 def _corroborate(args) -> int:
     """Collect from every witness and report agreement, or the reason there is none."""
     from .corroborate import collect
+    from .directory import load_directory, urls_from_directories
 
+    urls = list(args.witness or [])
+    hints: dict[str, dict] = {}
     try:
-        result = collect(args.txid, args.witness,
-                         min_operators=args.min_operators, timeout=args.timeout)
+        for source in args.directory or []:
+            entries = load_directory(source, timeout=args.timeout)
+            for entry in entries:
+                url = entry["url"]
+                if url not in urls:
+                    urls.append(url)
+                hints[url] = {k: v for k, v in entry.items() if k != "url"}
+        if not urls:
+            print("corroborate needs --witness or --directory", file=sys.stderr)
+            return 3
+        result = collect(args.txid, urls, min_operators=args.min_operators,
+                         timeout=args.timeout, hints=hints)
     except MeshError as exc:
         print(f"cannot corroborate: {exc}", file=sys.stderr)
         return 3
@@ -228,6 +258,11 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     except OSError as exc:
         print(f"cannot read receipt: {exc}", file=sys.stderr)
+        return 3
+    except ValueError as exc:
+        # json.JSONDecodeError is a ValueError; a malformed file is the caller's
+        # problem, so it is a clean usage failure rather than a crash.
+        print(f"receipt is not valid JSON: {exc}", file=sys.stderr)
         return 3
 
     if args.json:

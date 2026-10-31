@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.7.0 — anchor derivation
+
+### Added — `avm-mesh anchor`
+
+The gap this closes: a verifier needs `TrustedVoters`, and until now the only ways to obtain them were to be
+handed them or to read them out of the bundle's own previous message — which proves nothing, because whoever
+assembled the bundle chose it. The worked example in this repo had to carry a caveat for exactly that reason.
+
+`avm-mesh anchor` takes one pinned checkpoint (round, voters commitment, proven weight, genesis hash) plus a
+directory of captured proofpacks, verifies every interval forward with `authenticate_chain`, and prints the
+`--voters-commitment` / `--ln-proven-weight` the verifier needs:
+
+```
+authenticated 1 interval(s) from the checkpoint
+--voters-commitment  71Oh0YaxEA59JIgWUjMmnpz0KG8lWJ2jwXQiTYxp15FulxCMNfHfBMHT/8hyTNv2tMdWZl+YOz8go5DczFfuLw==
+--ln-proven-weight   2230418
+trust basis:         pinned checkpoint; every interval verified forward from it
+```
+
+A wrong checkpoint fails at the first link (tested: `ln_proven_weight + 1` gives exit 2, "coin selection
+failed at round 66457600"), so a bad checkpoint cannot produce a successful walk. The checkpoint remains
+trust — the walk proves "authentic back to the checkpoint you chose" — but one labelled trust decision
+replaces one per bundle, and the distance between them is auditable.
+
+Capture directories are strict: the filename must be the round the bundle's own message attests, because a
+mislabelled capture would otherwise be walked as if it belonged somewhere it did not.
+
+### Note on a guard found redundant
+
+The interval-grid check duplicates one inside `authenticate_chain`. Mutation testing showed removing it changes
+no outcome — it stays only because it fails *before* the capture directory is read. Recorded rather than
+quietly kept, so it is not mistaken for load-bearing.
+
+### README
+
+The worked example's caveat is replaced by the procedure that removes it: derive the anchor, don't copy it.
+
 ## 0.6.0 — replaces 0.5.0
 
 ### Fixed — 0.5.0 declared a licence it did not ship

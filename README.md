@@ -30,6 +30,7 @@ Three commands ship with it:
 |---|---|
 | `avm-mesh verify` | offline verification of one receipt, reporting each level separately |
 | `avm-mesh serve` | run a witness over a content-addressed store |
+| `avm-mesh anchor` | derive the `TrustedVoters` anchor by walking state proofs from a pinned checkpoint |
 | `avm-mesh corroborate` | ask several witnesses for one receipt and check they agree |
 
 ## The problem with what exists
@@ -266,14 +267,35 @@ attested:    J6FPFF4CKP4XUWUEDLEENV7EV5YDKFZHZJC6UYYWBDVBJLAT7IIA @ round 664576
 ```
 
 **What that proves, precisely.** The Falcon signatures, reveal membership, signed weight and coin selection
-over that bundle are verified, and you can re-verify them yourself. What is *not* established independently
-is the anchor: those two values come from the bundle's own previous state-proof message, because that is all
-the artifact carries. A production verifier takes them from a pinned genesis bootstrap or a chain walk that
-starts in something it already trusts — that is the step this example cannot do for you, and a receipt
-reaching `stake_attested` against a self-derived anchor is a worked example of the mechanics, not proof that
-Algorand's consensus signed anything you did not already have.
+over that bundle are verified, and you can re-verify them yourself. The anchor in the command above is taken
+from the bundle's own previous state-proof message — enough to exercise the tier, but not an independent
+anchor, because whoever assembled the bundle chose it.
 
-Remove both anchor flags and the same command fails closed. That is deliberate: the tier is never reached
+Derive it instead. `avm-mesh anchor` walks state proofs forward from a checkpoint you pin, verifying every
+interval on the way, and prints the flags the verifier needs:
+
+```sh
+avm-mesh anchor --genesis wGHE2Pwdvd7S12BL5FaOP20EGYesN73ktiC1qzkkit8= \
+  --anchor-round 66457344 \
+  --anchor-voters-commitment <the checkpoint interval's commitment> \
+  --anchor-ln-proven-weight <its proven weight> \
+  --target-round 66457600 --bundles ./captures
+```
+
+```
+authenticated 1 interval(s) from the checkpoint
+target round:        66457600
+--voters-commitment  71Oh0YaxEA59JIgWUjMmnpz0KG8lWJ2jwXQiTYxp15FulxCMNfHfBMHT/8hyTNv2tMdWZl+YOz8go5DczFfuLw==
+--ln-proven-weight   2230418
+trust basis:         pinned checkpoint; every interval verified forward from it
+```
+
+A wrong checkpoint fails immediately — the first link's signatures are checked against it, so a bad
+checkpoint cannot produce a successful walk. The checkpoint itself is still trust: the walk establishes
+"authentic back to the checkpoint you chose", never "authentic absolutely". What it removes is the need to
+trust each *bundle*, and it makes the distance between your trust decision and the evidence auditable.
+
+Remove both anchor flags from `verify` and it fails closed. That is deliberate: the tier is never reached
 from the bundle's own word.
 
 ## A2A: settlement evidence between agents
@@ -419,7 +441,7 @@ what the check above is for.
 
 ## Status
 
-**`0.6.0`** — `pip install avm-mesh`.
+**`0.7.0`** — `pip install avm-mesh`.
 
 **296 tests, 0 skipped**, on both Python **3.12** (clean-room gate on VM2: offline install from wheels only,
 audit rule A, red team) and Python **3.10.22** (296 passed), so `Requires-Python: >=3.10` is now demonstrated
@@ -440,6 +462,7 @@ VM2 clean-room container that installs from the built wheels offline and runs ag
 | Witness service (`serve`), content-addressed store, append-only receipts | shipped |
 | LEVEL 3 consensus attestation, anchor-required | shipped |
 | Corroboration across witnesses (`corroborate`) | shipped 0.5.0 |
+| Anchor derivation (`anchor`): checkpoint walk over verified intervals | shipped 0.7.0 |
 | Witness discovery (`--directory`, `/.well-known/mesh-directory.json`) | shipped 0.6.0 |
 | Worked mainnet example (`examples/`) | shipped 0.6.0 |
 | Service resource bounds (size cap, rate limit, slowloris timeout) | shipped 0.6.0 |

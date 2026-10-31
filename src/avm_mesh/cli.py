@@ -166,7 +166,49 @@ def _build_parser() -> argparse.ArgumentParser:
     c.add_argument("--timeout", type=float, default=5.0)
     c.add_argument("--json", action="store_true")
 
+    a = sub.add_parser("anchor",
+                       help="derive the TrustedVoters anchor by walking state proofs "
+                            "forward from a pinned checkpoint")
+    a.add_argument("--genesis", required=True, help="pinned genesis hash, base64")
+    a.add_argument("--anchor-round", type=int, required=True,
+                   help="round whose message you accept as the checkpoint")
+    a.add_argument("--anchor-voters-commitment", required=True,
+                   help="that interval's voters commitment, base64 (64 bytes)")
+    a.add_argument("--anchor-ln-proven-weight", type=int, required=True)
+    a.add_argument("--target-round", type=int, required=True)
+    a.add_argument("--bundles", required=True,
+                   help="directory of <round>.json or <round>.json.gz captures")
+    a.add_argument("--interval", type=int, default=256)
+    a.add_argument("--json", action="store_true")
+
     return parser
+
+
+def _anchor(args) -> int:
+    """Walk from the checkpoint to the target and print the anchor it derives."""
+    from .anchor import walk
+
+    try:
+        result = walk(genesis_hash_b64=args.genesis, anchor_round=args.anchor_round,
+                      voters_commitment_b64=args.anchor_voters_commitment,
+                      ln_proven_weight=args.anchor_ln_proven_weight,
+                      target_round=args.target_round, bundles=args.bundles,
+                      interval=args.interval)
+    except MeshError as exc:
+        print(f"cannot walk the chain: {exc}", file=sys.stderr)
+        return 3
+
+    if args.json:
+        print(json.dumps(result.to_dict(), indent=2))
+    elif result.ok:
+        print(f"authenticated {result.links_verified} interval(s) from the checkpoint")
+        print(f"target round:        {result.target_round}")
+        print(f"--voters-commitment  {result.voters_commitment_b64}")
+        print(f"--ln-proven-weight   {result.ln_proven_weight}")
+        print("trust basis:         pinned checkpoint; every interval verified forward from it")
+    else:
+        print(f"NOT AUTHENTICATED: {result.failure}", file=sys.stderr)
+    return 0 if result.ok else 2
 
 
 def _corroborate(args) -> int:
@@ -219,6 +261,8 @@ def main(argv: list[str] | None = None) -> int:
         return _serve(args)
     if args.cmd == "corroborate":
         return _corroborate(args)
+    if args.cmd == "anchor":
+        return _anchor(args)
     if args.cmd != "verify":
         parser.print_help()
         return 3

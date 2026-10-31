@@ -73,6 +73,7 @@ jobs:
   a2a-conformance:
     name: a2a TCK (jsonrpc, must)
     runs-on: ubuntu-latest
+    # Soft gate until this job has two consecutive greens; then drop the line.
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
@@ -82,22 +83,36 @@ jobs:
       - name: fetch a2a-tck
         run: git clone --depth 1 https://github.com/chopmob-cloud/a2a-tck.git /tmp/a2a-tck
       - name: install
+        # Every dependency the SUT and the TCK runner need is named explicitly.
+        # The first CI attempt died twice for absent packages (starlette, then
+        # pytest) and the SUT failure was invisible because the health loop only
+        # printed curl errors -- the log is now dumped on failure.
         run: |
           python -m pip install --upgrade pip
           python -m pip install . starlette uvicorn a2a-sdk sse-starlette \
-              grpcio protobuf googleapis-common-protos httpx jsonschema
+              grpcio protobuf googleapis-common-protos httpx jsonschema \
+              pytest pytest-asyncio pytest-html gherkin-official Jinja2
       - name: start SUT
         env:
           SUT_HOST: localhost:9999
           GRPC_PORT: "10000"
         run: |
           nohup python tools/sut/avm_sut.py > /tmp/sut.log 2>&1 &
-          for i in $(seq 1 20); do
-            curl -fsS http://localhost:9999/.well-known/agent-card.json >/dev/null && break
+          ok=0
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:9999/.well-known/agent-card.json > /tmp/card.json; then ok=1; break; fi
             sleep 1
           done
-          test -s /tmp/sut.log || true
+          if [ "$ok" -ne 1 ]; then
+            echo "SUT did not answer on :9999 -- its log follows"
+            cat /tmp/sut.log
+            exit 1
+          fi
+          echo "=== agent card ==="
+          cat /tmp/card.json
       - name: run TCK
+        env:
+          PYTHONPATH: /tmp/a2a-tck
         run: |
           cd /tmp/a2a-tck
           python run_tck.py --sut-host http://localhost:9999 --level must --transport jsonrpc

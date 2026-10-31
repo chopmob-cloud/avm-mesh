@@ -25,6 +25,8 @@ import json
 
 import pytest
 
+pytestmark = pytest.mark.signer
+
 from avm_mesh.receipt import SettlementReceipt
 from avm_mesh.cli import _make_signature_verifier
 

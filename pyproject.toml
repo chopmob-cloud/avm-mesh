@@ -34,5 +34,10 @@ Repository = "https://github.com/chopmob-cloud/avm-mesh"
 Issues = "https://github.com/chopmob-cloud/avm-mesh/issues"
 Changelog = "https://github.com/chopmob-cloud/avm-mesh/blob/main/CHANGELOG.md"
 
+[tool.pytest.ini_options]
+markers = [
+    "signer: optional test-only Falcon signing acceptance path, requires pqcrypto 0.1.0",
+]
+
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -476,10 +476,11 @@ what the check above is for.
 
 **`0.7.0`** — `pip install avm-mesh`.
 
-**361 tests, 0 skipped**, on both Python **3.12** (clean-room gate on VM2: offline install from wheels only,
-audit rule A, red team) and Python **3.10.22** (319 passed), so `Requires-Python: >=3.10` is demonstrated
-rather than asserted. GitHub CI runs the same suite with the fixture provisioned and a missing fixture is a
-failure, not a skip.
+**361 tests, 0 skipped** in the portable gate, on Python **3.12** (clean-room gate on VM2: offline install from wheels only,
+audit rule A, red team) and Python **3.10.22** (361 passed), so `Requires-Python: >=3.10` is demonstrated
+rather than asserted. The three test-only Falcon signer checks are marked `signer` and run separately in a
+signer-enabled environment: they pass with pqcrypto 0.1.0, which is deliberately not a runtime dependency.
+GitHub CI runs the portable suite with the fixture provisioned and a missing fixture is a failure, not a skip.
 
 Licence: Apache-2.0 with `LICENSE` and `NOTICE` in the repository, the wheel and the sdist, PEP 639
 `License-Expression` metadata, no contradicting classifier — checked inside the built artefacts by

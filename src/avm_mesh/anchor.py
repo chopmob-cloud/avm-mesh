@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import base64
 import gzip
+import zlib
 import json
 import pathlib
 from dataclasses import dataclass
@@ -92,8 +93,12 @@ def load_bundle(path: pathlib.Path) -> dict:
     try:
         with opener(path, "rb") as handle:
             raw = handle.read(MAX_BUNDLE_BYTES + 1)
-    except OSError as exc:
-        # Includes gzip.BadGzipFile and a truncated/corrupt stream.
+    except MeshError:
+        raise
+    except (OSError, EOFError, zlib.error) as exc:
+        # A truncated gzip stream raises EOFError, not OSError: `read()` on a stream
+        # whose trailer is missing reports end-of-file. zlib.error covers a corrupt
+        # deflate block. Both are the caller's input being wrong, so both are MeshError.
         raise MeshError(f"cannot read {path}: {exc}") from exc
     if len(raw) > MAX_BUNDLE_BYTES:
         raise MeshError(
@@ -110,13 +115,24 @@ def load_bundle(path: pathlib.Path) -> dict:
     return bundle
 
 
-def links_from_directory(directory: pathlib.Path | str, genesis_hash: bytes) -> dict:
+def links_from_directory(directory: pathlib.Path | str, genesis_hash: bytes, *,
+                         rounds: set[int] | None = None,
+                         max_links: int = 4096) -> dict:
     """Build round-keyed chain links from ``<round>.json`` / ``<round>.json.gz`` files.
 
     The filename is not decoration: it must be the round the bundle's own state-proof
     message attests. A mislabelled capture would otherwise be walked as if it belonged
     somewhere it does not.
+
+    ``rounds`` limits loading to the intervals a walk actually needs. Without it a
+    directory is decoded in full, so per-file size caps bound each capture but not the
+    total -- a directory of a thousand captures is loaded to walk one link.
     """
+    if rounds is not None:
+        if not isinstance(rounds, set):
+            raise MeshError("rounds must be a set of integers")
+        if len(rounds) > max_links:
+            raise MeshError(f"walk would need {len(rounds)} links, over the {max_links} limit")
     from avm_proofpack import mpack
     from avm_proofpack.consensus import chain as chain_module
 
@@ -133,9 +149,18 @@ def links_from_directory(directory: pathlib.Path | str, genesis_hash: bytes) -> 
         # ".json.gz" is eight characters; ".json" four. Stripping the wrong count
         # leaves a digit behind and every bundle then looks mislabelled.
         stem = path.name[:-8] if path.name.endswith(".json.gz") else path.stem
-        if not stem.isdigit():
-            raise MeshError(f"{path.name}: filename must be the attested round")
+        # isdigit() is true for characters like "²" that int() then rejects, so the
+        # grammar is ASCII decimal digits, checked before conversion.
+        if not (stem.isascii() and stem.isdigit()):
+            # A file outside the round grammar is only a problem if the walk needed it;
+            # stray files in a capture directory are common and harmless.
+            if rounds is None:
+                raise MeshError(f"{path.name}: filename must be the attested round "
+                                "(ASCII decimal digits)")
+            continue
         declared_round = int(stem)
+        if rounds is not None and declared_round not in rounds:
+            continue
 
         bundle = load_bundle(path)
         for key in ("state_proof_msgpack_b64", "state_proof_message"):
@@ -158,6 +183,9 @@ def links_from_directory(directory: pathlib.Path | str, genesis_hash: bytes) -> 
         links[declared_round] = chain_module.ChainLink(
             state_proof=state_proof, message=message, genesis_hash=genesis_hash)
     if not links:
+        if rounds is not None:
+            wanted = ", ".join(str(r) for r in sorted(rounds)[:3])
+            raise MeshError(f"no captures for the rounds this walk needs ({wanted}...) in {root}")
         raise MeshError(f"no bundles found in {root}")
     return links
 
@@ -191,7 +219,8 @@ def walk(*, genesis_hash_b64: str, anchor_round: int, voters_commitment_b64: str
         round=anchor_round, voters_commitment=voters_commitment,
         ln_proven_weight=ln_proven_weight, genesis_hash=genesis_hash)
 
-    links = links_from_directory(bundles, genesis_hash)
+    needed = set(range(anchor_round + interval, target_round + 1, interval))
+    links = links_from_directory(bundles, genesis_hash, rounds=needed)
     try:
         result = chain_module.authenticate_chain(
             anchor, links, target_round=target_round, interval=interval)

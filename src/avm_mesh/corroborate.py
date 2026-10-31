@@ -34,7 +34,8 @@ class WitnessView:
     url: str
     witness_id: str | None = None
     operator_id: str | None = None
-    chain: str | None = None
+    chain: str | None = None            # the chain the RECEIPT claims
+    card_chain: str | None = None       # the chain the witness CARD claims
     round: int | None = None
     trust_root: str | None = None
     pointer_digest: str | None = None
@@ -88,6 +89,7 @@ class Corroboration:
                     "witness_id": v.witness_id,
                     "operator_id": v.operator_id,
                     "chain": v.chain,
+                    "card_chain": v.card_chain,
                     "round": v.round,
                     "trust_root": v.trust_root,
                     "pointer_digest": v.pointer_digest,
@@ -100,10 +102,24 @@ class Corroboration:
         }
 
 
-def _get(url: str, timeout: float) -> tuple[int, bytes]:
+#: Response caps per endpoint kind. A contacted witness chooses these bytes, so the
+#: client must not be willing to allocate without limit.
+MAX_CARD_BYTES = 64 * 1024
+MAX_RECEIPT_BYTES = 64 * 1024
+MAX_PROOF_BYTES = 8 * 1024 * 1024
+
+
+def _get(url: str, timeout: float,
+         limit: int = MAX_RECEIPT_BYTES) -> tuple[int, bytes]:
     try:
         with urllib.request.urlopen(url, timeout=timeout) as response:
-            return response.status, response.read()
+            declared = response.headers.get("Content-Length")
+            if declared is not None and declared.isdigit() and int(declared) > limit:
+                raise MeshError(f"{url} declares {declared} bytes, over the {limit} limit")
+            body = response.read(limit + 1)
+            if len(body) > limit:
+                raise MeshError(f"{url} returned more than the {limit} byte limit")
+            return response.status, body
     except urllib.error.HTTPError as exc:
         return exc.code, b""
     except (urllib.error.URLError, OSError) as exc:
@@ -111,14 +127,30 @@ def _get(url: str, timeout: float) -> tuple[int, bytes]:
 
 
 def _card(base: str, timeout: float) -> dict:
-    status, body = _get(base.rstrip("/") + "/witness", timeout)
+    status, body = _get(base.rstrip("/") + "/witness", timeout, limit=MAX_CARD_BYTES)
     if status != 200:
         return {}
     try:
         card = json.loads(body)
+    except RecursionError as exc:          # deep nesting is an attack, not a crash
+        raise MeshError("witness card is nested too deeply") from exc
     except ValueError:
         return {}
     return card if isinstance(card, dict) else {}
+
+
+def _identity(card: dict, field: str) -> str | None:
+    """A card's identity fields must be non-empty strings to be usable.
+
+    Without this an endpoint can supply ``[]`` (unhashable, which aborts the whole
+    collection when it reaches a set) or ``""`` (which would satisfy a threshold).
+    """
+    value = card.get(field)
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise MeshError(f"witness card {field} must be a non-empty string")
+    return value
 
 
 def collect(txid: str, witness_urls: list[str], *, min_operators: int = 2,
@@ -151,8 +183,9 @@ def collect(txid: str, witness_urls: list[str], *, min_operators: int = 2,
         view = WitnessView(url=url)
         try:
             card = _card(url, timeout)
-            view.witness_id = card.get("witness_id")
-            view.operator_id = card.get("operator_id")
+            view.witness_id = _identity(card, "witness_id")
+            view.operator_id = _identity(card, "operator_id")
+            view.card_chain = card.get("chain") if isinstance(card.get("chain"), str) else None
 
             claimed = (hints or {}).get(url) or {}
             for field in ("operator_id", "chain"):
@@ -171,6 +204,10 @@ def collect(txid: str, witness_urls: list[str], *, min_operators: int = 2,
                 if receipt.txid != txid:
                     raise MeshError(f"witness returned a receipt for {receipt.txid}")
                 view.chain, view.round = receipt.chain, receipt.round
+                if view.card_chain is not None and view.card_chain != receipt.chain:
+                    raise MeshError(
+                        f"card claims chain {view.card_chain!r} but the receipt says "
+                        f"{receipt.chain!r}")
                 view.trust_root = receipt.trust_root
                 view.pointer_digest = receipt.pointer.digest
 
@@ -207,6 +244,12 @@ def collect(txid: str, witness_urls: list[str], *, min_operators: int = 2,
     tiers = {v.trust_root for v in counting}
     if len(tiers) > 1:
         result.problems.append("witnesses disagree about the trust tier")
+    chains = {v.chain for v in counting}
+    if len(chains) > 1:
+        # Two chains agreeing on a digest is not agreement: it is two different
+        # settlement identities being reported as one.
+        result.problems.append(
+            f"witnesses disagree about the chain: {', '.join(sorted(filter(None, chains)))}")
     if len(result.operators) < min_operators:
         result.problems.append(
             f"only {len(result.operators)} independent operator(s); {min_operators} required "

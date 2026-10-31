@@ -230,7 +230,12 @@ avm-mesh serve --root ./store --port 8080 \
 
 The service is bounded by default: a proofpack over 8 MiB is refused (both at store time and on serve), a
 request path over 2048 characters gets 414, more than 120 requests per client per 10 s gets 429 with
-`Retry-After`, and a connection that stalls mid-request is dropped after 10 s. Operators can tune these with
+`Retry-After`, and a connection that stalls mid-request is dropped after 10 s.
+
+**Behind a reverse proxy these limits key on the socket peer address**, which is the proxy, not the client.
+Every user then shares one quota, and forwarded-client headers are deliberately ignored because trusting them
+lets anyone spoof a fresh bucket per request. If you deploy behind a proxy, raise `--rate-limit` for the shared
+quota or rate-limit per client at the proxy itself, and treat that as your responsibility rather than ours. Operators can tune these with
 `--max-proofpack-bytes`, `--rate-limit` and `--rate-window`. The defaults exist so a witness cannot be used
 as a free amplifier or a slowloris cushion.
 
@@ -290,10 +295,17 @@ target round:        66457600
 trust basis:         pinned checkpoint; every interval verified forward from it
 ```
 
-A wrong checkpoint fails immediately — the first link's signatures are checked against it, so a bad
-checkpoint cannot produce a successful walk. The checkpoint itself is still trust: the walk establishes
-"authentic back to the checkpoint you chose", never "authentic absolutely". What it removes is the need to
-trust each *bundle*, and it makes the distance between your trust decision and the evidence auditable.
+**What a walk proves, and what it does not.** Every interval from your checkpoint to the target is verified:
+Falcon signatures, reveal membership against the voters commitment, signed weight and coin selection. A
+checkpoint whose weight is wrong by one, or whose voters commitment is wrong at all, fails at the first link —
+both were tested and both are refused.
+
+It does **not** prove the checkpoint itself. A checkpoint is your trust decision, and one that happens to match
+an adversary's chosen signing set would be walked successfully. It also does not authenticate the genesis hash:
+the dependency documents `ChainAnchor.genesis_hash` as caller bookkeeping, and the state proof carries no
+genesis field, so that label is a consistency check on your own bookkeeping — the voters commitment is what the
+proofs are actually checked against. Pick the checkpoint from a source you would trust independently; the walk
+makes the distance between that decision and the evidence auditable, not the decision itself.
 
 Remove both anchor flags from `verify` and it fails closed. That is deliberate: the tier is never reached
 from the bundle's own word.
@@ -340,8 +352,19 @@ Two claims are kept strictly apart:
 | `bond_microalgo` + `escrow_txid` | economic stake that can be slashed — verifiable on-chain |
 | `operator_id` | who runs the witness — **not** a trust source, only an independence input |
 
-**Independence is enforced, not assumed.** `independent_corroborators()` counts at most one witness per
-operator *and* per escrow, because:
+**Uniqueness is enforced; independence is not provable here.** `independent_corroborators()` counts at most one
+witness per operator *and* per escrow. That stops the two cheapest fakes — one operator behind several URLs, and
+one bond counted twice:
+
+- two endpoints of one operator are one witness wearing two hats — presenting them as a quorum is the
+  oldest trick in the attestation playbook;
+- two witnesses pointing at one escrow is one bond counted twice, the cheapest possible fake.
+
+What it cannot do is establish that two *distinct* `operator_id` values belong to two genuinely independent
+parties. Identity strings are supplied by the witnesses themselves, so colluding operators can claim distinct
+ids and satisfy the count. Treat corroboration as a consistency check whose independence rests on how you chose
+the witnesses — which is why the bond exists and why the directory is a lead rather than a trust root.
+<!-- The list items above continue in the original text. -->
 
 - two endpoints of one operator are one witness wearing two hats — presenting them as a quorum is the
   oldest trick in the attestation playbook;

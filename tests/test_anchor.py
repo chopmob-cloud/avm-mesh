@@ -235,3 +235,65 @@ def test_deeply_nested_json_is_refused_not_crashed(tmp_path):
     path.write_text("[" * 100_000 + "]" * 100_000, encoding="utf-8")
     with pytest.raises(MeshError):
         load_bundle(path)
+
+
+# ------------------------------------------- malformed input stays inside MeshError
+
+def test_a_truncated_gzip_is_refused_not_raised_as_eof(tmp_path):
+    """A missing gzip trailer raises EOFError, which is not an OSError."""
+    path = tmp_path / "66457600.json.gz"
+    good = tmp_path / "good.gz"
+    with gzip.open(good, "wt", encoding="utf-8") as handle:
+        json.dump({"a": "b" * 200}, handle)
+    path.write_bytes(good.read_bytes()[:-5])
+    with pytest.raises(MeshError, match="cannot read"):
+        load_bundle(path)
+
+
+def test_a_non_ascii_digit_filename_is_refused(tmp_path):
+    """"\u00b2".isdigit() is True, int() then raises ValueError."""
+    directory = tmp_path / "b"
+    directory.mkdir()
+    (directory / "\u00b2.json").write_text("{}", encoding="utf-8")
+    with pytest.raises(MeshError, match="ASCII decimal digits"):
+        links_from_directory(directory, base64.b64decode(GENESIS))
+
+
+def test_a_stray_file_is_ignored_when_the_walk_does_not_need_it(tmp_path):
+    """Capture directories collect junk; only the rounds in range matter."""
+    directory = tmp_path / "b"
+    directory.mkdir()
+    (directory / "notes.txt").write_text("ignore me", encoding="utf-8")
+    with gzip.open(directory / f"{TARGET}.json.gz", "wt", encoding="utf-8") as handle:
+        json.dump(_bundle(), handle)
+    links = links_from_directory(directory, base64.b64decode(GENESIS), rounds={TARGET})
+    assert set(links) == {TARGET}
+
+
+# --------------------------------------------- only the needed rounds are loaded
+
+def test_a_walk_does_not_parse_captures_it_does_not_need():
+    """Per-file caps bound each capture; only the round filter bounds the total.
+
+    The unneeded files here are deliberately unparseable. If the walk loads them it
+    fails; if it loads only what it needs, it succeeds.
+    """
+    directory = _capture()
+    for extra in (TARGET + 256, TARGET + 512, TARGET - 256):
+        (directory / f"{extra}.json").write_text("{ not json at all", encoding="utf-8")
+    result = _walk(_bundle(), directory)
+    assert result.ok, result.failure
+    assert result.links_verified == 1
+
+
+def test_a_walk_that_needs_absent_rounds_says_so():
+    result = _walk(_bundle(), _capture(), target_round=TARGET + 512)
+    assert not result.ok
+    # The first needed round is present; the second is not, and the walk names it.
+    assert "missing link" in (result.failure or "")
+
+
+def test_an_absurd_interval_count_is_refused():
+    with pytest.raises(MeshError, match="over the .* limit"):
+        links_from_directory(_capture(), base64.b64decode(GENESIS),
+                             rounds=set(range(0, 5000 * 256, 256)))

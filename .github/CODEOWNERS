@@ -1,0 +1,19 @@
+# Default owners for reviews.
+# The trust-sensitive paths are listed explicitly so that a change to them
+# cannot land under a blanket ownership rule.
+*                   @chopmob-cloud
+
+# Crypto-adjacent: a change here invalidates every stored verification claim.
+/src/avm_mesh/receipt.py        @chopmob-cloud
+/src/avm_mesh/sealed.py         @chopmob-cloud
+/src/avm_mesh/attestation.py    @chopmob-cloud
+/src/avm_mesh/rails/            @chopmob-cloud
+
+# Network surface: SSRF guard, caps, connection ceiling.
+/src/avm_mesh/net.py            @chopmob-cloud
+/src/avm_mesh/service.py        @chopmob-cloud
+/src/avm_mesh/corroborate.py    @chopmob-cloud
+
+# The gates themselves.
+/tools/                         @chopmob-cloud
+/.github/                       @chopmob-cloud

@@ -58,8 +58,11 @@ jobs:
         with:
           python-version: "3.12"
       - name: build
+        # pytest and the runtime dependencies are installed because the artefact check
+        # now extracts the sdist and collects its tests. A recipient of the sdist would
+        # install these before running the suite, so the check mirrors that.
         run: |
-          python -m pip install --upgrade pip build twine
+          python -m pip install --upgrade pip build twine pytest avm-proofpack avm-effectproof
           python -m build --outdir dist .
       - name: twine check
         run: python -m twine check dist/*

@@ -63,6 +63,44 @@ def check_wheel(path: pathlib.Path) -> str | None:
         return version
 
 
+def check_sdist_runs_its_tests(path: pathlib.Path) -> None:
+    """Extract the sdist and collect its tests.
+
+    A source archive that ships test files nobody can collect is worse than one with
+    no tests: it advertises reproducibility it does not have. Existing at all was the
+    old bar, and it passed an archive missing conftest.py and _assets.py.
+    """
+    import os
+    import subprocess
+    import sys
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as scratch:
+        with tarfile.open(path) as archive:
+            try:
+                archive.extractall(scratch, filter="data")   # py3.12+ safe extraction
+            except TypeError:                                # older Python
+                archive.extractall(scratch)
+        roots = [p for p in pathlib.Path(scratch).iterdir() if p.is_dir()]
+        check(len(roots) == 1, f"sdist should extract to one directory, found {len(roots)}")
+        if not roots:
+            return
+        project = roots[0]
+        env = os.environ.copy()
+        # The sdist uses a src/ layout and is NOT installed in this interpreter, so the
+        # extracted tree needs its own source on the path. Without this the check
+        # reports import errors that have nothing to do with the archive's contents --
+        # a checker that cries wolf is worse than no checker.
+        existing = env.get("PYTHONPATH")
+        env["PYTHONPATH"] = (str(project / "src") + (os.pathsep + existing if existing else ""))
+        proc = subprocess.run(
+            [sys.executable, "-m", "pytest", str(project / "tests"), "--collect-only", "-q"],
+            capture_output=True, text=True, cwd=str(project), env=env)
+        if proc.returncode != 0:
+            tail = (proc.stdout + proc.stderr).strip().splitlines()[-3:]
+            check(False, "tests inside the sdist do not collect: " + " | ".join(tail))
+
+
 def check_sdist(path: pathlib.Path) -> str | None:
     with tarfile.open(path) as sdist:
         names = sdist.getnames()
@@ -99,6 +137,7 @@ def main(argv: list[str]) -> int:
 
     wheel_version = check_wheel(wheels[0])
     sdist_version = check_sdist(sdists[0])
+    check_sdist_runs_its_tests(sdists[0])
     check(wheel_version == sdist_version,
           f"version mismatch: wheel {wheel_version!r} vs sdist {sdist_version!r}")
 
@@ -108,7 +147,7 @@ def main(argv: list[str]) -> int:
         return 1
 
     print(f"PASS  wheel {wheels[0].name}: LICENSE + NOTICE, License-Expression, entry points")
-    print(f"PASS  sdist {sdists[0].name}: LICENSE + NOTICE, tests included")
+    print(f"PASS  sdist {sdists[0].name}: LICENSE + NOTICE, tests included and collectable")
     print(f"PASS  version {wheel_version} consistent")
     return 0
 

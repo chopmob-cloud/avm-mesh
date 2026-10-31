@@ -18,13 +18,15 @@ without a dependency upgrade.
 """
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
+import os
 import pathlib
+import re
+import tempfile
 import threading
 import time
-import re
-import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
@@ -136,7 +138,19 @@ class Store:
         payload = json.dumps(receipt.to_dict(), sort_keys=True, separators=(",", ":"))
         digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
         path = self.receipts / f"{receipt.txid}.json"
-        if path.is_file():
+        sidecar = self.receipts / f"{receipt.txid}.sha256"
+        data = payload.encode("utf-8")
+
+        # Append-only, atomically. The previous version checked is_file() then wrote a
+        # shared "<txid>.tmp" and replaced the target: two concurrent callers could both
+        # pass the check and both "succeed", so the second silently replaced the first --
+        # exactly the equivocation the append-only rule exists to prevent.
+        #
+        # Commit by linking a private temp file into place: link() fails if the target
+        # already exists, so the create and the check are one operation.
+        created = self._commit_exclusive(path, data)
+
+        if not created:
             existing = hashlib.sha256(path.read_text(encoding="utf-8").encode("utf-8")).hexdigest()
             if existing != digest:
                 raise MeshError(
@@ -144,11 +158,39 @@ class Store:
                     "refusing to replace it"
                 )
             return receipt.txid
-        tmp = path.with_suffix(".tmp")
-        tmp.write_text(payload, encoding="utf-8")
-        tmp.replace(path)
-        (self.receipts / f"{receipt.txid}.sha256").write_text(digest, encoding="utf-8")
+
+        sidecar.write_text(digest, encoding="utf-8")
         return receipt.txid
+
+    def _commit_exclusive(self, path: pathlib.Path, data: bytes) -> bool:
+        """Create ``path`` only if absent. Returns True if this call created it."""
+        handle, tmp_name = tempfile.mkstemp(dir=str(path.parent), prefix=".receipt-",
+                                            suffix=".tmp")
+        try:
+            with os.fdopen(handle, "wb") as stream:
+                stream.write(data)
+                stream.flush()
+                os.fsync(stream.fileno())
+            try:
+                os.link(tmp_name, path)          # atomic, fails if the target exists
+                return True
+            except FileExistsError:
+                return False
+            except (AttributeError, OSError):
+                # Filesystems without hard links: fall back to exclusive create. The
+                # write is not atomic, so a reader may see a partial file; it is the
+                # best available guarantee there and is still no-clobber.
+                try:
+                    fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                except FileExistsError:
+                    return False
+                with os.fdopen(fd, "wb") as stream:
+                    stream.write(data)
+                    os.fsync(stream.fileno())
+                return True
+        finally:
+            with contextlib.suppress(OSError):
+                os.unlink(tmp_name)
 
     # -- reads ----------------------------------------------------------
     def get_proofpack(self, digest: str) -> dict:

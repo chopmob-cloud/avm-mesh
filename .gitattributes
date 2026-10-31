@@ -1,0 +1,10 @@
+# Shell scripts must survive a Windows checkout: a CRLF shebang script fails under
+# Linux `sh` with "set: Illegal option -", which is how the clean-room gate was
+# found to be broken when run from the repository rather than a copy.
+* text=auto
+*.sh text eol=lf
+*.py text eol=lf
+*.md text eol=lf
+LICENSE text eol=lf
+NOTICE text eol=lf
+*.json text eol=lf

@@ -1,0 +1,8 @@
+# The sdist must be able to run the tests it ships. Without these rules the archive
+# contained test_*.py but not conftest.py or _assets.py, so every extracted-sdist
+# collection failed -- while the in-repo gate passed, because it tests a Git checkout.
+include LICENSE NOTICE README.md CHANGELOG.md
+recursive-include tests *.py
+recursive-include tools *.py *.sh
+recursive-include docs *.md
+recursive-include examples *.json

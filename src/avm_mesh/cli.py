@@ -27,7 +27,7 @@ def _file_resolver(root: pathlib.Path):
     return resolve
 
 
-def _make_signature_verifier(pubkey_b64: str):
+def _make_signature_verifier(pubkey_b64: str, *, hex_digest: bool = False):
     """LEVEL 2: the operator's Falcon-1024 signature over the content hash.
 
     Uses avm_proofpack's own verifier rather than `pqcrypto`. Two reasons: it is
@@ -52,9 +52,17 @@ def _make_signature_verifier(pubkey_b64: str):
     def verify(content_bytes: bytes, signature: dict) -> bool:
         if not isinstance(signature, dict) or "sig_b64" not in signature:
             raise ValueError("signature object has no sig_b64")
-        sig = _b64.b64decode(signature["sig_b64"], validate=True)
-        # The rails receipt signs the content HASH, not the bytes.
-        digest = _h.sha256(content_bytes).digest()
+        try:
+            sig = _b64.b64decode(signature["sig_b64"], validate=True)
+        except Exception as exc:
+            raise ValueError("signature sig_b64 is not valid base64") from exc
+        # Two conventions exist in this estate and they are NOT interchangeable:
+        # this package seals over the raw 32-byte digest, while the rails bundle
+        # signs sha256(...).hexdigest().encode() -- 64 ASCII bytes. Verifying one
+        # with the other's convention rejects every genuine artefact, so the
+        # entry point chooses rather than the verifier guessing.
+        digest = (_h.sha256(content_bytes).hexdigest().encode("utf-8")
+                  if hex_digest else _h.sha256(content_bytes).digest())
         return bool(falcon1024_verify(pubkey, digest, sig))
 
     return verify
@@ -254,7 +262,16 @@ def _corroborate(args) -> int:
     return 0 if result.agreed else 2
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None, *, signature_style: str = "raw") -> int:
+    """Entry point. ``signature_style`` selects the LEVEL 2 signing convention.
+
+    "raw" (default) is this package's own: the operator signs the 32-byte digest.
+    "hex" is the rails bundle's: the operator signs the 64-byte hex string. The
+    rails entry point passes "hex"; getting this wrong rejects every genuine
+    receipt of the other kind, silently and completely.
+    """
+    if signature_style not in ("raw", "hex"):
+        raise ValueError(f"unknown signature_style {signature_style!r}")
     parser = _build_parser()
     args = parser.parse_args(argv)
     if args.cmd == "serve":
@@ -288,11 +305,27 @@ def main(argv: list[str] | None = None) -> int:
             anchor = TrustedVoters(voters_commitment=vc,
                                    ln_proven_weight=args.ln_proven_weight)
 
+        verify_signature = None
+        if args.operator_pubkey_b64 is not None:
+            try:
+                verify_signature = _make_signature_verifier(
+                    args.operator_pubkey_b64, hex_digest=(signature_style == "hex"))
+            except ValueError as exc:
+                print(f"--operator-pubkey-b64: {exc}", file=sys.stderr)
+                return 3
+            if not isinstance(sealed.get("signature"), dict):
+                # The caller asked for LEVEL 2. Reporting "present-unverified" and
+                # exiting 0 would mean the requested check silently did not happen.
+                print("--operator-pubkey-b64 was supplied but the receipt carries no "
+                      "signature to check", file=sys.stderr)
+                return 2
+
         result = verify_sealed(
             sealed,
             _file_resolver(pathlib.Path(args.evidence)),
             trusted_voters=anchor,
             expected_genesis_hash_b64=args.genesis,
+            verify_signature=verify_signature,
         )
     except MeshError as exc:
         if args.json:

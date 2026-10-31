@@ -17,7 +17,9 @@ _EXIT_MAP = {0: 0, 2: 1, 3: 2}
 
 
 def main(argv=None):
-    code = cli_main(argv if argv is not None else sys.argv[1:])
+    # The rails receipt signs the hex digest, not the raw one. Delegating without
+    # saying so verifies rails receipts under the wrong convention.
+    code = cli_main(argv if argv is not None else sys.argv[1:], signature_style="hex")
     return _EXIT_MAP.get(code, code)
 
 

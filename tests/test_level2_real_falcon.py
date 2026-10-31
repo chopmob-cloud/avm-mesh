@@ -11,10 +11,12 @@ limitation rather than a result:
      to hash, or stops checking the returned bool.
   3. UNPROVEN, and recorded as such: an operator key signing a real receipt end
      to end. No Falcon-1024 *signer* is installable in this environment --
-     pqcrypto 1.0.0 dropped Falcon entirely and no 0.9.x build exists for this
-     platform -- so it cannot be closed here without inventing a signature.
-     An operator signing with their own toolchain is the only honest way to
-     close it, and that belongs in their acceptance test.
+     pqcrypto 1.0.0 dropped Falcon entirely; pqcrypto 0.1.0 still ships it
+     (cp37 binary, importable on py3.12 as pqcrypto.sign.falcon_1024) and its
+     signatures round-trip against avm_proofpack.consensus.falcon. New companion
+     test: test_level2_real_signer.py. An end-to-end operator signing contract
+     with a generated key is now demonstrable rather than recorded UNPROVEN,
+     while the production dependency stance (pqcrypto never a runtime dep) holds.
 
 Also pinned: pqcrypto 1.0.0 no longer ships Falcon (its sign subpackage lists
 ML-KEM, ML-DSA, SLH-DSA, McEliece, HQC and SNTRUP), so LEVEL 2 must not depend

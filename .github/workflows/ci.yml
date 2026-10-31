@@ -73,8 +73,8 @@ jobs:
   a2a-conformance:
     name: a2a TCK (jsonrpc, must)
     runs-on: ubuntu-latest
-    # Soft gate until this job has two consecutive greens; then drop the line.
-    continue-on-error: true
+    # Hard gate: the run on 9dab2cd was green (80 passed, 0 failed after the
+    # content-type fix). A conformance regression should fail CI, not whisper.
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

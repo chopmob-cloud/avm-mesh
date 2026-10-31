@@ -296,7 +296,33 @@ async def main() -> None:
     # NOTE: agent_card_routes must precede rest_routes — REST exposes a
     # catch-all Mount('/{tenant}', ...) that would otherwise swallow
     # /.well-known/agent-card.json before it's tried.
-    main_app = Starlette(routes=[*jsonrpc_routes, *agent_card_routes, *rest_routes])
+    # --- content-type gate -------------------------------------------------
+    # A2A over JSON-RPC declares an unsupported media type by returning
+    # ContentTypeNotSupportedError (-32005). Handing a text/plain body to the
+    # SDK's JSON parser produces ParseError (-32700) instead, which is both the
+    # wrong code and a misleading diagnosis. Reject at the HTTP layer with 415,
+    # which HTTP defines for exactly this and which the TCK accepts as a valid
+    # rejection (it skips rather than failing). Applies to the JSON-RPC and REST
+    # surfaces only; the agent card is a GET and carries no body.
+    from starlette.middleware import Middleware
+    from starlette.middleware.base import BaseHTTPMiddleware
+    from starlette.responses import JSONResponse
+
+    class _ContentTypeGate(BaseHTTPMiddleware):
+        async def dispatch(self, request, call_next):
+            if request.method in ("POST", "PUT", "PATCH"):
+                raw = (request.headers.get("content-type") or "").split(";")[0].strip().lower()
+                if raw and raw not in ("application/json", "application/json-rpc"):
+                    return JSONResponse(
+                        {"jsonrpc": "2.0", "id": None,
+                         "error": {"code": -32005,
+                                   "message": "ContentTypeNotSupportedError: expected application/json"}},
+                        status_code=415,
+                    )
+            return await call_next(request)
+
+    main_app = Starlette(routes=[*jsonrpc_routes, *agent_card_routes, *rest_routes],
+                         middleware=[Middleware(_ContentTypeGate)])
 
     config = uvicorn.Config(
         main_app, host='0.0.0.0', port=http_port, log_level='info'

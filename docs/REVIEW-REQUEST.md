@@ -1,4 +1,45 @@
-# Independent review request — avm-mesh 0.4.2 (`9bfda93`)
+# Independent review request — avm-mesh 0.7.1 (`c0b25c8`)
+
+> **Everything below the horizontal rule is historical** (0.4.2 at `9bfda93`, 226 tests). It is kept because
+> the findings and the addendum are still the record of what was reviewed and what closed. The current
+> instructions and numbers are this section.
+>
+> | Fact | Value |
+> |---|---|
+> | Version | `0.7.1`, live on PyPI as wheel and sdist |
+> | Reviewed commit | `c0b25c8` on `main` |
+> | Python floor | 3.10, executed in a container rather than asserted |
+> | Runtime deps | `avm-proofpack>=0.4.1`, `avm-effectproof>=0.1.1` |
+>
+> ```sh
+> pip install avm-mesh==0.7.1 pytest
+>
+> python -m pytest tests -q -m 'not signer'           # 361 passed, 0 skipped
+> python tools/audit_trust_boundary.py                # rule A OK; B/C/D advisory
+> python tools/red_team.py --fixture <bundle>.json.gz # RED TEAM CLEAN
+> ```
+>
+> Fixture: `avm-proofpack/tests/fixtures/stake_attested_algorand_66457600.json.gz`. Set
+> `AVM_PROOFPACK_TESTS` to a checkout's `tests/` directory and `AVM_MESH_REQUIRE_FIXTURE=1` so an absent
+> fixture fails rather than skips.
+>
+> Three tests carry the `signer` marker and are excluded above: they need `pqcrypto==0.1.0`, which is
+> test-only, has no Linux wheel, and is not a runtime dependency. Run them where that signer exists and
+> expect **3 passed**. `tools/cleanroom.sh` encodes the full gate and fails on a missing wheel, on any
+> skipped test, on zero collected, on a fatal audit rule, and on an accepted red-team attack.
+>
+> **Still true from the body below**: `trust.py` is unsigned; `bond.py` verifies nothing on chain; rule D is
+> advisory by choice. **No longer true**: the package is on PyPI; `avm-proofpack` 0.4.1 is released; the
+> settlement amount is bound via `avm_mesh.effects`; the LEVEL 2 signer is demonstrable with
+> `pqcrypto==0.1.0`; `service.py` has size caps, a rate limit, a slowloris timeout, a 64-connection ceiling
+> and an SSRF guard.
+>
+> Current review focus and the unproven list are in `docs/OPERATOR-RUNSHEET.md` and `docs/A2A-CONFORMANCE.md`;
+> the short version: a genuine rails receipt, a second independent capture, and `avm_proofpack` internals.
+
+---
+
+# Historical review request — avm-mesh 0.4.2 (`9bfda93`)
 
 What I want from you is **adversarial review of running code**, not a read-through. Every real defect in
 this estate so far was found by attacking it — five by you in `avm-proofpack`, two by me attacking
@@ -88,9 +129,9 @@ rather than leaving it implicit.
   `match=`; the behaviour is covered by 95 fail-closed tests. I chose not to inflate the number by
   adding string matches. If you think that metric is wrong, say so.
 - **No on-chain bonding contract.** Track 3 work, decisions pending.
-- **Not on PyPI.** Blocked on `avm-proofpack` 0.4.1 being released first.
-- **One stash exists locally** (`wip: receipt genesis pin + attested-interval binding (unreviewed)`) —
-  superseded work, kept for traceability, not part of any branch.
+- ~~Not on PyPI~~ — superseded: 0.7.1 is published; `avm-proofpack` 0.4.1 was released.
+- ~~One stash exists locally~~ — resolved and dropped; its genesis-pin and interval-binding changes are in
+  `receipt.py` at HEAD.
 
 ## What counts as a finding
 

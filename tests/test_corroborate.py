@@ -98,7 +98,10 @@ def test_client_rejects_a_witness_that_serves_the_wrong_bytes(tmp_path, monkeypa
     honest_receipt = json.dumps(_receipt().to_dict()).encode()
     wrong_bundle = json.dumps({"transaction": {"txid": "OTHER"}}).encode()
 
-    def fake_get(url, timeout):
+    # The real _get takes a per-endpoint byte limit; a double must mirror the
+    # signature or it fails with "unexpected keyword argument", not the condition
+    # the test is about.
+    def fake_get(url, timeout, limit=None, **kwargs):
         if url.endswith("/witness"):
             return 200, json.dumps({"witness_id": "w-x",
                                     "operator_id": "op-x"}).encode()

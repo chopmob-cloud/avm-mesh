@@ -105,6 +105,12 @@ environment, so that belongs in an operator's acceptance test. `sealed.verify_se
 injected `verify_signature`, which is correct -- the verifier's job is to check a signature, not to own a
 signing toolchain -- but it means the signer side of LEVEL 2 is unexercised here by design, not by stub.
 
+> **Correction, 2026-10-31:** the sentence above is now false. `pqcrypto` 0.1.0 ships Falcon-1024 and can be
+> built from sdist on Linux; with it installed, `tests/test_level2_real_signer.py` signs with a generated
+> operator key and the verifier accepts, end to end. What remains true is the narrower statement: no signer is
+> a runtime dependency, and there is no prebuilt Linux wheel. The paragraph is kept because this document is
+> the record of what was reviewed at `9bfda93`; the correction is what to rely on.
+
 ### 3. `trust.py` is an unsigned root of trust
 
 `TrustPolicy` pins chain, genesis hash, anchor and witnesses — but the policy document itself has no

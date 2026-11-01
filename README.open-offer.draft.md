@@ -1,7 +1,9 @@
 <!-- DRAFT: proposed README reframed as an open offer to the Algorand and VOI ecosystems.
-     Not yet swapped in for README.md. Preserves the honest limits of the current README
-     verbatim; condenses the deep mechanism sections and links them rather than dropping
-     them. Review and approve before replacing README.md. -->
+     Not yet swapped in for README.md. It carries the current README's honest-limits
+     section with two deliberate changes: the text is rewrapped, and the bonding
+     bullet now points at docs/BONDING-DECISIONS.md instead of saying the four
+     decisions are ours to make. The deep mechanism sections are condensed and
+     linked rather than dropped. Review and approve before replacing README.md. -->
 
 # avm-mesh
 
@@ -91,9 +93,11 @@ chooses to engage.
 - **The rails adapter has never seen a real rails receipt.** The format and signing convention
   are pinned by tests against the shipped verifier's source, but no receipt produced by that
   bundle has been verified here. Treat 'drop-in' as unproven end to end until one is.
-- **LEVEL 2 end-to-end is unproven.** No Falcon-1024 *signer* is installable in this environment,
-  so the operator-signature path is tested by substitution and KAT vectors, not by an operator
-  signing for real.
+- **LEVEL 2 needs an operator-side signer.** No signer is a *runtime* dependency, and `pqcrypto`
+  0.1.0 ships no prebuilt Linux wheel, so it is built from sdist where the acceptance test runs.
+  With that signer installed the operator-signature path is exercised end to end
+  (`tests/test_level2_real_signer.py`, three tests, marked `signer`); without it those tests are
+  deselected rather than counted as passing.
 
 ## Status and provenance
 

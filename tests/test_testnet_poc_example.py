@@ -81,3 +81,34 @@ def test_testnet_poc_flow_removes_a_false_witness(tmp_path):
     live = ledger.active_witnesses()
     assert [w.witness_id for w in live.independent_corroborators(CHAIN)] == ["w1"]
     assert verify_ledger(ledger.path) == 2
+
+
+#: Algorand mainnet genesis, the pin a production verifier carries. Admitting
+#: `testnet-v1.0` to SUPPORTED_CHAINS must not let a testnet attestation satisfy
+#: this pin, or a testnet proof could be presented as mainnet evidence.
+ALGORAND_MAINNET_GENESIS = "wGHE2Pwdvd7S12BL5FaOP20EGYesN73ktiC1qzkkit8="
+
+
+def test_a_testnet_attestation_is_refused_where_mainnet_is_pinned():
+    """The isolation claim in attestation.py, pinned by a test.
+
+    Removing the genesis comparison in verify_attestation turns this red; that is
+    the point of it. Testnet consensus is testnet-grade security, and a verifier
+    that pins mainnet must never accept it.
+    """
+    bundle = _bundle()
+    anchor = _anchor(bundle)
+    att = attest(bundle, "proofpack:testnet-example", trusted_voters=anchor)
+    with pytest.raises(MeshError, match="genesis hash mismatch"):
+        verify_attestation(att, lambda uri: bundle, trusted_voters=anchor,
+                           expected_genesis_hash_b64=ALGORAND_MAINNET_GENESIS)
+
+
+def test_the_same_attestation_verifies_under_its_own_genesis_pin():
+    """Control for the test above: refusal is about the pin, not the evidence."""
+    bundle = _bundle()
+    anchor = _anchor(bundle)
+    att = attest(bundle, "proofpack:testnet-example", trusted_voters=anchor)
+    report = verify_attestation(att, lambda uri: bundle, trusted_voters=anchor,
+                                expected_genesis_hash_b64=TESTNET_GENESIS)
+    assert report.trust_root == "stake_attested"

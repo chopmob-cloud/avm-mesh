@@ -78,8 +78,11 @@ arbiter (single signer, panel, or vote).
 **What is unproven**: that any bond exists, is unspent, or is active. There is no escrow reader. Everything
 downstream of a bond is a model, not a guarantee, and the code says so.
 
-**Who owns it**: the founder. These are economic and legal parameters, not engineering choices, and they
-cannot be inferred from the code.
+**Who owns it**: AlgoVoi sets a **bootstrap** configuration so a live platform exists to exercise the flow,
+and the lasting parameters are offered to the Algorand and VOI communities to ratify through their own
+governance. `docs/BONDING-DECISIONS.md` lays out the decision surface, the options and the trade-offs, and
+states that the lasting parameters are deliberately not AlgoVoi's to set. The bootstrap is the owner's call;
+the lasting values are not, which is a narrower blocker than this document originally implied.
 
 **Effort**: not estimable until the four answers exist. The implementation work is real but the specification
 is the blocker.

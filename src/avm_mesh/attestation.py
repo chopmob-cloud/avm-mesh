@@ -33,7 +33,15 @@ from typing import Any, Callable
 from .receipt import MeshError, bundle_digest
 
 SCHEME = "avm-stateproof-falcon1024-v2"
-SUPPORTED_CHAINS = ("mainnet-v1.0", "voimain-v1.0")
+# Chains that carry Falcon-1024 state-proof consensus, so a receipt for them can
+# reach stake_attested. testnet-v1.0 is Algorand testnet, which genuinely emits
+# state proofs (confirmed against a live testnet node); it is admitted so the
+# proof-of-concept can run on real testnet evidence. Admitting it does NOT let a
+# testnet attestation pass where mainnet is expected: verify_attestation binds the
+# genesis hash to the authenticated header, so a verifier that pins the mainnet
+# genesis rejects a testnet proof. Testnet consensus is testnet-grade security, not
+# mainnet-grade, and a caller must still pin the genesis it actually trusts.
+SUPPORTED_CHAINS = ("mainnet-v1.0", "voimain-v1.0", "testnet-v1.0")
 
 
 def _b64(b: bytes) -> str:

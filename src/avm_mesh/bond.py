@@ -27,6 +27,7 @@ it shares an operator with the rest of the quorum.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from fractions import Fraction
 from typing import Iterable
 
 MIN_BOND_MICROALGO = 1_000_000
@@ -34,6 +35,78 @@ MIN_BOND_MICROALGO = 1_000_000
 
 class BondError(Exception):
     """Raised when a witness set cannot support the claim being made."""
+
+
+@dataclass(frozen=True)
+class BondPolicy:
+    """Tunable bonding parameters for a deployment.
+
+    This is CONFIGURATION, not enforcement. The module reasons over DECLARED
+    bonds (see the module docstring), so a policy only parameterises the declared
+    arithmetic: the floor a declared bond must clear, and the fraction a
+    proven-false attestation would forfeit. Nothing here reads a chain or moves a
+    coin.
+
+    The lasting values are a community decision, not a product default
+    (`docs/BONDING-DECISIONS.md`). The defaults below are the dev / proof-of-concept
+    placeholders, deliberately low, and are superseded by whatever an ecosystem
+    ratifies.
+    """
+    min_bond_microalgo: int = MIN_BOND_MICROALGO
+    # A proven-false attestation forfeits this fraction of the declared bond.
+    # Accepts a float, an int, a string like "1/3", or a Fraction (see _fraction).
+    slash_fraction: "float | int | str | Fraction" = 1.0
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.min_bond_microalgo, int) or isinstance(self.min_bond_microalgo, bool) \
+                or self.min_bond_microalgo < 0:
+            raise BondError("min_bond_microalgo must be a non-negative integer")
+        frac = self._fraction()  # validates the type and parse
+        if not (0 <= frac <= 1):
+            raise BondError("slash_fraction must be between 0.0 and 1.0")
+
+    def _fraction(self) -> Fraction:
+        """The slash fraction as an exact rational.
+
+        A float is read at its exact binary value via its shortest decimal
+        (``Fraction(str(x))``), so a decimal literal like 0.29 is 29/100 and does
+        not drift. A fraction with no finite decimal (1/3) must be passed exactly,
+        as the string "1/3" or a Fraction; a float 1/3 is only as exact as the
+        float, which is the caller's choice to make.
+        """
+        x = self.slash_fraction
+        if isinstance(x, bool):
+            raise BondError("slash_fraction must be a number, string or Fraction, not a bool")
+        if isinstance(x, float):
+            import math
+            if not math.isfinite(x):
+                raise BondError("slash_fraction must be a finite number")
+            return Fraction(str(x))
+        if isinstance(x, (int, str, Fraction)):
+            try:
+                return Fraction(x)
+            except (ValueError, ZeroDivisionError) as exc:
+                raise BondError(f"slash_fraction is not a valid fraction: {exc}") from exc
+        raise BondError("slash_fraction must be a number, string or Fraction")
+
+    def slash_amount(self, bond_microalgo: int) -> int:
+        """Declared microalgo a proven-false attestation forfeits under this policy.
+
+        Illustrative arithmetic over a declared figure, not an amount this code can
+        take: there is no escrow to take it from until on-chain bonding is built.
+
+        Computed in exact rational arithmetic and floored, never in binary float:
+        ``int(100 * 0.29)`` is 28, not 29, and a forfeiture figure must not drift on
+        a representation artefact.
+        """
+        if not isinstance(bond_microalgo, int) or isinstance(bond_microalgo, bool) or bond_microalgo < 0:
+            raise BondError("bond_microalgo must be a non-negative integer")
+        return int(bond_microalgo * self._fraction())
+
+
+#: The dev / PoC default policy. Equal to the historical module behaviour (1 ALGO
+#: floor, whole-bond forfeit) so callers that pass no policy are unchanged.
+DEFAULT_POLICY = BondPolicy()
 
 
 @dataclass(frozen=True)
@@ -61,7 +134,12 @@ class Witness:
 
     @property
     def bonded(self) -> bool:
-        return self.active and self.bond_microalgo >= MIN_BOND_MICROALGO
+        return self.is_bonded(DEFAULT_POLICY)
+
+    def is_bonded(self, policy: "BondPolicy | None" = None) -> bool:
+        """Active, and declaring a stake at or above the policy floor."""
+        policy = policy or DEFAULT_POLICY
+        return self.active and self.bond_microalgo >= policy.min_bond_microalgo
 
 @dataclass(frozen=True)
 class WitnessSet:
@@ -74,10 +152,11 @@ class WitnessSet:
                 raise BondError(f"duplicate witness_id {w.witness_id!r}")
             seen.add(w.witness_id)
 
-    def bonded(self) -> tuple[Witness, ...]:
-        return tuple(w for w in self.witnesses if w.bonded)
+    def bonded(self, policy: "BondPolicy | None" = None) -> tuple[Witness, ...]:
+        return tuple(w for w in self.witnesses if w.is_bonded(policy))
 
-    def independent_corroborators(self, chain: str) -> tuple[Witness, ...]:
+    def independent_corroborators(self, chain: str,
+                                  policy: "BondPolicy | None" = None) -> tuple[Witness, ...]:
         """Bonded witnesses on `chain`, at most ONE per operator and per escrow.
 
         Two endpoints of the same operator are not a quorum, and neither are
@@ -87,7 +166,7 @@ class WitnessSet:
         chosen: list[Witness] = []
         seen_operators: set[str] = set()
         seen_escrows: set[str] = set()
-        for w in sorted(self.bonded(), key=lambda x: (-x.bond_microalgo, x.witness_id)):
+        for w in sorted(self.bonded(policy), key=lambda x: (-x.bond_microalgo, x.witness_id)):
             if w.chain != chain:
                 continue
             if w.operator_id in seen_operators or w.escrow_txid in seen_escrows:
@@ -97,7 +176,8 @@ class WitnessSet:
             chosen.append(w)
         return tuple(chosen)
 
-    def require_corroboration(self, chain: str, threshold: int) -> tuple[Witness, ...]:
+    def require_corroboration(self, chain: str, threshold: int,
+                              policy: "BondPolicy | None" = None) -> tuple[Witness, ...]:
         """Return the independent corroborators, or refuse.
 
         Refusing is the point: a caller that cannot reach the threshold must
@@ -105,25 +185,31 @@ class WitnessSet:
         """
         if threshold < 1:
             raise BondError("threshold must be at least 1")
-        got = self.independent_corroborators(chain)
+        got = self.independent_corroborators(chain, policy)
         if len(got) < threshold:
+            bonded = self.bonded(policy)
             raise BondError(
                 f"insufficient independent corroboration on {chain}: "
                 f"{len(got)} of {threshold} required "
-                f"({len(self.bonded())} bonded, "
-                f"{len({w.operator_id for w in self.bonded()})} distinct operators)"
+                f"({len(bonded)} bonded, "
+                f"{len({w.operator_id for w in bonded})} distinct operators)"
             )
         return got[:threshold]
 
-    def slashable_stake(self, chain: str) -> int:
+    def slashable_stake(self, chain: str, policy: "BondPolicy | None" = None) -> int:
         """Total DECLARED microalgo a false attestation could put at risk.
 
         Counted over independent operators only, because that is the amount
-        that could actually be taken for one lie. This is arithmetic over the
-        declared bond figures, not a chain-verified sum: it is only as real as
-        the bonds themselves, which this module does not verify on-chain.
+        that could actually be taken for one lie, and under the policy's slash
+        fraction rather than the gross bond: with a 100% fraction (the default)
+        this is the sum of the bonds, but a lesser fraction puts less at risk and
+        this figure must say so. Arithmetic over the declared bond figures, not a
+        chain-verified sum: it is only as real as the bonds themselves, which this
+        module does not verify on-chain.
         """
-        return sum(w.bond_microalgo for w in self.independent_corroborators(chain))
+        policy = policy or DEFAULT_POLICY
+        return sum(policy.slash_amount(w.bond_microalgo)
+                   for w in self.independent_corroborators(chain, policy))
 
 
 def witnesses(*items: Witness | dict) -> WitnessSet:
@@ -142,7 +228,8 @@ def witnesses(*items: Witness | dict) -> WitnessSet:
     return WitnessSet(tuple(out))
 
 def validate_corroboration(claimed, witness_set: "WitnessSet", chain: str,
-                           threshold: int) -> tuple["Witness", ...]:
+                           threshold: int,
+                           policy: "BondPolicy | None" = None) -> tuple["Witness", ...]:
     """Check a receipt's claimed corroboration against the bonded witness set.
 
     A receipt records who observed the capture. That claim is worthless unless it
@@ -157,6 +244,7 @@ def validate_corroboration(claimed, witness_set: "WitnessSet", chain: str,
     """
     if threshold < 1:
         raise BondError("threshold must be at least 1")
+    policy = policy or DEFAULT_POLICY
     if claimed is None:
         claimed = ()
     if not isinstance(claimed, (list, tuple)):
@@ -173,7 +261,7 @@ def validate_corroboration(claimed, witness_set: "WitnessSet", chain: str,
         w = by_id.get(wid)
         if w is None:
             raise BondError(f"claimed corroborator {wid!r} has no bond record")
-        if not w.bonded:
+        if not w.is_bonded(policy):
             raise BondError(f"claimed corroborator {wid!r} is not bonded")
         if w.chain != chain:
             raise BondError(f"claimed corroborator {wid!r} is bonded on {w.chain!r}, not {chain!r}")

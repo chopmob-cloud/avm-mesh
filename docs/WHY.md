@@ -55,7 +55,9 @@ no reader that checks the chain for an unspent, active bond.
 
 Until that exists, everything downstream of a bond is a model rather than a guarantee. Closing it needs four
 decisions that are economic and legal rather than technical: the bonding asset, the slash fraction, the
-dispute window, and who arbitrates.
+dispute window, and who arbitrates. `docs/BONDING-DECISIONS.md` proposes a bootstrap configuration so the flow
+can be exercised now, and offers the lasting parameters to the Algorand and VOI communities rather than
+setting them here.
 
 ### 2. Independence is one capture deep
 

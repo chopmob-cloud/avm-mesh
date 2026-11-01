@@ -130,8 +130,9 @@ is done for you.
   is checked over), but no receipt produced by the bundle has been verified here. The rails source tree is not
   available here, so adoption is tested against the format and against our own fixtures, not against bytes
   the bundle actually emits. Verify with a real receipt before release.
-- **The signer side of LEVEL 2 is unexercised.** No Falcon-1024 signer is installable in this environment,
-  so an operator-signed receipt has never been verified end to end. That belongs in an operator acceptance
-  test.
+- **The signer side of LEVEL 2 needs an operator-side signer.** No signer is a runtime dependency and
+  `pqcrypto` 0.1.0 has no prebuilt Linux wheel, so it is built from sdist for the acceptance run. With it
+  installed, `tests/test_level2_real_signer.py` exercises an operator key signing and the verifier accepting,
+  end to end; those tests are marked `signer` and deselected where the signer is absent.
 - **Only Algorand and Voi can reach `stake_attested`.** Hedera, Stellar, Base, Solana and Tempo have no
   state proofs; their receipts stay honestly at LEVEL 2. Do not present seven chains as equal.

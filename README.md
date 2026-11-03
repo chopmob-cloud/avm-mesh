@@ -506,7 +506,7 @@ independent. That is what the check above is for.
 
 ## Status
 
-**Version `0.8.0`** — `pip install avm-mesh`.
+**Version `0.9.0`** — `pip install avm-mesh`.
 
 The portable test gate runs **391 tests with 0 skipped** on both Python 3.12 and Python 3.10.22 (an isolated
 clean-room run: offline install from wheels only, plus the trust-boundary audit and the red-team suite), so
@@ -552,6 +552,11 @@ extension-related requirements (`CARD-EXT-001`, `CARD-EXT-002`, `EXTENSION_SUPPO
 agent-card retrieval and the refusal of an unsupported required extension, and none of them constructs,
 carries or inspects a third-party extension payload. A green run therefore cannot validate the extension's
 own semantics — only that carrying it breaks nothing. See [`docs/A2A-CONFORMANCE.md`](docs/A2A-CONFORMANCE.md).
+
+**The extension's own contract is checked separately.** `tests/vectors/a2a/settlement-evidence-v1.json`
+holds thirteen cases (two must pass, eleven must refuse) and both verifiers — the library and
+`tools/verify_settlement_artifact.py`, which imports nothing from this project — are required to reach the
+same verdict on every one. See [`docs/EXTENSION-VECTORS.md`](docs/EXTENSION-VECTORS.md).
 
 ## Honest limits
 

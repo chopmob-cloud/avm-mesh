@@ -1,0 +1,261 @@
+{
+  "extension": "https://algovoi.co.uk/a2a/extensions/settlement-evidence/v1",
+  "note": "Each case is an artefact plus the verdict both implementations must reach: the library verifier and the standalone stdlib tool.",
+  "cases": [
+    {
+      "name": "valid_structural",
+      "expect": "pass",
+      "why": "envelope and LEVEL 1 hold",
+      "artifact": {
+        "artifact_id": "settlement-receipt",
+        "name": "settlement-receipt",
+        "parts": [
+          {
+            "data": {
+              "avm_mesh_receipt": {
+                "canonical_bytes_b64": "eyJpc3N1ZXJfZGlkIjoiZGlkOmV4YW1wbGU6diIsInNldHRsZW1lbnQiOnsiYW1vdW50X21pY3JvdW5pdHMiOiIxMDAwMDAwIiwidHhfaWQiOiJWRUNUT1ItMSJ9fQ==",
+                "content_hash": "3a4194ae2d628b7d15b081dbd9b7950fc28472e6031989896616fbb06e1696a4",
+                "evidence_uri": "file://proofpack.json"
+              },
+              "extension": "https://algovoi.co.uk/a2a/extensions/settlement-evidence/v1"
+            },
+            "mediaType": "application/json"
+          }
+        ]
+      }
+    },
+    {
+      "name": "valid_legacy_kind_tag",
+      "expect": "pass",
+      "why": "v0.3 peers still send kind: data",
+      "artifact": {
+        "artifact_id": "settlement-receipt",
+        "name": "settlement-receipt",
+        "parts": [
+          {
+            "data": {
+              "avm_mesh_receipt": {
+                "canonical_bytes_b64": "eyJpc3N1ZXJfZGlkIjoiZGlkOmV4YW1wbGU6diIsInNldHRsZW1lbnQiOnsiYW1vdW50X21pY3JvdW5pdHMiOiIxMDAwMDAwIiwidHhfaWQiOiJWRUNUT1ItMSJ9fQ==",
+                "content_hash": "3a4194ae2d628b7d15b081dbd9b7950fc28472e6031989896616fbb06e1696a4",
+                "evidence_uri": "file://proofpack.json"
+              },
+              "extension": "https://algovoi.co.uk/a2a/extensions/settlement-evidence/v1"
+            },
+            "mediaType": "application/json",
+            "kind": "data"
+          }
+        ]
+      }
+    },
+    {
+      "name": "kind_contradicts_payload",
+      "expect": "reject",
+      "why": "a part tagged text is not the payload",
+      "artifact": {
+        "artifact_id": "settlement-receipt",
+        "name": "settlement-receipt",
+        "parts": [
+          {
+            "data": {
+              "avm_mesh_receipt": {
+                "canonical_bytes_b64": "eyJpc3N1ZXJfZGlkIjoiZGlkOmV4YW1wbGU6diIsInNldHRsZW1lbnQiOnsiYW1vdW50X21pY3JvdW5pdHMiOiIxMDAwMDAwIiwidHhfaWQiOiJWRUNUT1ItMSJ9fQ==",
+                "content_hash": "3a4194ae2d628b7d15b081dbd9b7950fc28472e6031989896616fbb06e1696a4",
+                "evidence_uri": "file://proofpack.json"
+              },
+              "extension": "https://algovoi.co.uk/a2a/extensions/settlement-evidence/v1"
+            },
+            "mediaType": "application/json",
+            "kind": "text"
+          }
+        ]
+      }
+    },
+    {
+      "name": "extension_uri_mismatch",
+      "expect": "reject",
+      "why": "another extension's payload",
+      "artifact": {
+        "artifact_id": "settlement-receipt",
+        "name": "settlement-receipt",
+        "parts": [
+          {
+            "data": {
+              "avm_mesh_receipt": {
+                "canonical_bytes_b64": "eyJpc3N1ZXJfZGlkIjoiZGlkOmV4YW1wbGU6diIsInNldHRsZW1lbnQiOnsiYW1vdW50X21pY3JvdW5pdHMiOiIxMDAwMDAwIiwidHhfaWQiOiJWRUNUT1ItMSJ9fQ==",
+                "content_hash": "3a4194ae2d628b7d15b081dbd9b7950fc28472e6031989896616fbb06e1696a4",
+                "evidence_uri": "file://proofpack.json"
+              },
+              "extension": "https://example.invalid/other/v1"
+            },
+            "mediaType": "application/json"
+          }
+        ]
+      }
+    },
+    {
+      "name": "no_parts_member",
+      "expect": "reject",
+      "why": "no parts list",
+      "artifact": {
+        "artifact_id": "x"
+      }
+    },
+    {
+      "name": "parts_not_a_list",
+      "expect": "reject",
+      "why": "parts is not a list",
+      "artifact": {
+        "artifact_id": "x",
+        "parts": "nope"
+      }
+    },
+    {
+      "name": "part_not_an_object",
+      "expect": "reject",
+      "why": "non-object part",
+      "artifact": {
+        "artifact_id": "x",
+        "parts": [
+          42
+        ]
+      }
+    },
+    {
+      "name": "payload_not_an_object",
+      "expect": "reject",
+      "why": "receipt payload is a string",
+      "artifact": {
+        "artifact_id": "settlement-receipt",
+        "name": "settlement-receipt",
+        "parts": [
+          {
+            "data": {
+              "avm_mesh_receipt": "not a dict",
+              "extension": "https://algovoi.co.uk/a2a/extensions/settlement-evidence/v1"
+            },
+            "mediaType": "application/json"
+          }
+        ]
+      }
+    },
+    {
+      "name": "content_hash_mismatch",
+      "expect": "reject",
+      "why": "declared digest does not match the bytes",
+      "artifact": {
+        "artifact_id": "settlement-receipt",
+        "name": "settlement-receipt",
+        "parts": [
+          {
+            "data": {
+              "avm_mesh_receipt": {
+                "canonical_bytes_b64": "eyJpc3N1ZXJfZGlkIjoiZGlkOmV4YW1wbGU6diIsInNldHRsZW1lbnQiOnsiYW1vdW50X21pY3JvdW5pdHMiOiIxMDAwMDAwIiwidHhfaWQiOiJWRUNUT1ItMSJ9fQ==",
+                "content_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+                "evidence_uri": "file://proofpack.json"
+              },
+              "extension": "https://algovoi.co.uk/a2a/extensions/settlement-evidence/v1"
+            },
+            "mediaType": "application/json"
+          }
+        ]
+      }
+    },
+    {
+      "name": "canonical_not_base64",
+      "expect": "reject",
+      "why": "canonical_bytes_b64 is junk",
+      "artifact": {
+        "artifact_id": "settlement-receipt",
+        "name": "settlement-receipt",
+        "parts": [
+          {
+            "data": {
+              "avm_mesh_receipt": {
+                "canonical_bytes_b64": "!!!not base64!!!",
+                "content_hash": "3a4194ae2d628b7d15b081dbd9b7950fc28472e6031989896616fbb06e1696a4",
+                "evidence_uri": "file://proofpack.json"
+              },
+              "extension": "https://algovoi.co.uk/a2a/extensions/settlement-evidence/v1"
+            },
+            "mediaType": "application/json"
+          }
+        ]
+      }
+    },
+    {
+      "name": "canonical_is_not_json",
+      "expect": "reject",
+      "why": "digest matches but the bytes are not JSON",
+      "artifact": {
+        "artifact_id": "settlement-receipt",
+        "name": "settlement-receipt",
+        "parts": [
+          {
+            "data": {
+              "avm_mesh_receipt": {
+                "canonical_bytes_b64": "dGhpcyBpcyBub3QganNvbg==",
+                "content_hash": "5d2f9a2d1fed2742c527f2ebe668b6c98ab1fba3caf8d4148f81716493b1e72d"
+              },
+              "extension": "https://algovoi.co.uk/a2a/extensions/settlement-evidence/v1"
+            },
+            "mediaType": "application/json"
+          }
+        ]
+      }
+    },
+    {
+      "name": "missing_content_hash",
+      "expect": "reject",
+      "why": "no digest to compare",
+      "artifact": {
+        "artifact_id": "settlement-receipt",
+        "name": "settlement-receipt",
+        "parts": [
+          {
+            "data": {
+              "avm_mesh_receipt": {
+                "canonical_bytes_b64": "eyJpc3N1ZXJfZGlkIjoiZGlkOmV4YW1wbGU6diIsInNldHRsZW1lbnQiOnsiYW1vdW50X21pY3JvdW5pdHMiOiIxMDAwMDAwIiwidHhfaWQiOiJWRUNUT1ItMSJ9fQ==",
+                "evidence_uri": "file://proofpack.json"
+              },
+              "extension": "https://algovoi.co.uk/a2a/extensions/settlement-evidence/v1"
+            },
+            "mediaType": "application/json"
+          }
+        ]
+      }
+    },
+    {
+      "name": "two_payloads_ambiguous",
+      "expect": "reject",
+      "why": "two payloads must not be resolved by taking the first",
+      "artifact": {
+        "artifact_id": "settlement-receipt",
+        "name": "settlement-receipt",
+        "parts": [
+          {
+            "data": {
+              "avm_mesh_receipt": {
+                "canonical_bytes_b64": "eyJpc3N1ZXJfZGlkIjoiZGlkOmV4YW1wbGU6diIsInNldHRsZW1lbnQiOnsiYW1vdW50X21pY3JvdW5pdHMiOiIxMDAwMDAwIiwidHhfaWQiOiJWRUNUT1ItMSJ9fQ==",
+                "content_hash": "3a4194ae2d628b7d15b081dbd9b7950fc28472e6031989896616fbb06e1696a4",
+                "evidence_uri": "file://proofpack.json"
+              },
+              "extension": "https://algovoi.co.uk/a2a/extensions/settlement-evidence/v1"
+            },
+            "mediaType": "application/json"
+          },
+          {
+            "data": {
+              "avm_mesh_receipt": {
+                "canonical_bytes_b64": "eyJpc3N1ZXJfZGlkIjoiZGlkOmV4YW1wbGU6diIsInNldHRsZW1lbnQiOnsidHhfaWQiOiJWRUNUT1ItMiJ9fQ==",
+                "content_hash": "62eb07caaa1753acabe8878563170af863b08b2cde0f6cb3c59005c9cf9b8838",
+                "evidence_uri": "file://proofpack.json"
+              },
+              "extension": "https://algovoi.co.uk/a2a/extensions/settlement-evidence/v1"
+            },
+            "mediaType": "application/json"
+          }
+        ]
+      }
+    }
+  ]
+}

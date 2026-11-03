@@ -133,8 +133,13 @@ def verify_artifact(artifact: dict, resolve: Callable[[str], dict],
             continue
         data = part.get("data")
         if isinstance(data, dict) and data.get("extension") == EXTENSION_URI:
+            if payload is not None:
+                # Two payloads is not a shape to resolve by taking the first: a
+                # sender who means one thing does not send two, and a receiver
+                # that silently picks one can disagree with another receiver
+                # reading the same artefact.
+                raise MeshError("artifact carries more than one settlement-evidence payload")
             payload = data.get("avm_mesh_receipt")
-            break
 
     if payload is None:
         raise MeshError("artifact carries no settlement-evidence payload")

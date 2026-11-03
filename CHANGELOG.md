@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.9.0 — extension conformance vectors and a standalone verifier
+
+### Added
+
+- **`tests/vectors/a2a/settlement-evidence-v1.json`** — thirteen cases for the settlement-evidence
+  artefact: two that must pass, eleven that must be refused, each with the reason it is in the set.
+- **`tools/verify_settlement_artifact.py`** — a standalone verifier for the artefact that imports nothing
+  from AlgoVoi: standard library only, short enough to read before running. It establishes the envelope and
+  LEVEL 1 integrity, and reports LEVEL 2 and LEVEL 3 as `not checked` rather than omitting them, because a
+  convenience verifier that stayed quiet about the levels it skipped would be worse than none.
+- **`docs/EXTENSION-VECTORS.md`** — what the vectors prove, what each verifier establishes, and the five
+  guards proven by removing them.
+
+The TCK has requirements for extensions as a mechanism but none for the payload a third-party extension
+carries, so a green TCK run cannot say whether this extension accepts what it should and refuses what it
+should not. These vectors are that check, and they are offered openly so another implementer can hold us to
+them.
+
+### Changed
+
+- **`verify_artifact` refuses an artefact carrying two settlement-evidence payloads.** It previously took
+  the first match and ignored the rest. A sender who means one thing does not send two, and a receiver that
+  silently picks one can disagree with another receiver reading the same bytes. The standalone verifier makes
+  the same refusal, and a vector pins both.
+
+### Verified
+
+Every case is run through the library and the standalone tool and the suite fails if they disagree. Each of
+the five guards was removed in turn and the matching case required to fail, then restored.
+
 ## 0.8.0 — testnet witness-bonding proof of concept
 
 New public surface, all of it testnet-only and declared-value-only. The limits are

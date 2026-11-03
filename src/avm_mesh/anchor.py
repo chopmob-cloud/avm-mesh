@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import base64
 import gzip
+import os
 import zlib
 import json
 import pathlib
@@ -36,6 +37,18 @@ DEFAULT_INTERVAL = 256
 #: the DECOMPRESSED bytes: a gzip bomb is small on disk and enormous when read, which
 #: is exactly why a stat() alone is not enough.
 MAX_BUNDLE_BYTES = 8 * 1024 * 1024
+
+#: Most directory entries a walk will look at. The per-file cap bounds one capture;
+#: nothing bounded the number of them, so `sorted(root.iterdir())` built a list of
+#: every entry before any limit applied. The count is enforced while scanning, so
+#: memory tracks the limit rather than the size of the directory an attacker chose.
+MAX_DIRECTORY_ENTRIES = 10240
+
+#: gzip's two-byte magic. Used instead of the filename suffix: a capture that was
+#: compressed but kept a `.json` name is a real accident, and a `.json.gz` name on
+#: plain JSON is equally real. Deciding from the bytes means the name cannot make
+#: the loader open the wrong decoder.
+GZIP_MAGIC = b"\x1f\x8b"
 
 
 @dataclass
@@ -81,6 +94,14 @@ def load_bundle(path: pathlib.Path) -> dict:
     large plain file), and on the bytes actually read *after* decompression (catches a
     gzip bomb, whose compressed size says nothing about what it expands to).
     """
+    #: A capture is a file the caller placed here, not a pointer to somewhere else.
+    #: is_file() follows symlinks, so without this a link named for a round would be
+    #: read from outside the directory the operator was asked to trust, and its bytes
+    #: would become evidence. Hard links cannot be detected from the path; this
+    #: refuses what it can see rather than implying it sees everything.
+    if path.is_symlink():
+        raise MeshError(f"{path} is a symlink; refusing to read a capture through a link")
+
     try:
         on_disk = path.stat().st_size
     except OSError as exc:
@@ -89,10 +110,25 @@ def load_bundle(path: pathlib.Path) -> dict:
         raise MeshError(
             f"{path} is {on_disk} bytes on disk, over the {MAX_BUNDLE_BYTES} byte limit")
 
-    opener = gzip.open if path.suffix == ".gz" else open
     try:
-        with opener(path, "rb") as handle:
-            raw = handle.read(MAX_BUNDLE_BYTES + 1)
+        with path.open("rb") as raw_handle:
+            magic = raw_handle.read(len(GZIP_MAGIC))
+            raw_handle.seek(0)
+            if magic == GZIP_MAGIC:
+                # GzipFile closes the file object it is handed, so the outer block then
+                # closes an already-closed handle. Python file objects treat that as a
+                # no-op, and this is the arrangement that keeps the read bounded while
+                # still letting the `with` own the descriptor.
+                with gzip.GzipFile(fileobj=raw_handle) as handle:
+                    raw = handle.read(MAX_BUNDLE_BYTES + 1)
+            elif path.suffix == ".gz":
+                # Named for gzip but the bytes are not: say that, rather than letting the
+                # JSON parser report "Expecting value" about a file the caller believes
+                # is compressed.
+                raise MeshError(
+                    f"{path} is named .gz but does not begin with gzip data")
+            else:
+                raw = raw_handle.read(MAX_BUNDLE_BYTES + 1)
     except MeshError:
         raise
     except (OSError, EOFError, zlib.error) as exc:
@@ -142,8 +178,27 @@ def links_from_directory(directory: pathlib.Path | str, genesis_hash: bytes, *,
     if not root.is_dir():
         raise MeshError(f"bundle directory is not a directory: {root}")
 
+    #: Counted while scanning, not after: `sorted(root.iterdir())` materialised every
+    #: entry before any limit could apply, so a directory of a million names was paid
+    #: for in memory whether or not a single capture was ever loaded.
+    entries: list[pathlib.Path] = []
+    with os.scandir(root) as scan:
+        for entry in scan:
+            # Checked before appending, so the list never holds more than the limit:
+            # testing after the append let one extra Path through, which is small but
+            # means the documented cap was not the cap that applied.
+            if len(entries) >= MAX_DIRECTORY_ENTRIES:
+                raise MeshError(
+                    f"{root} holds more than {MAX_DIRECTORY_ENTRIES} entries; refusing to "
+                    "walk a directory that large")
+            # DirEntry.is_symlink() reads the type from the directory scan, so this costs
+            # no extra stat per entry the way pathlib's is_symlink() would.
+            if entry.is_symlink():
+                raise MeshError(f"{entry.name}: capture is a symlink, refusing to follow it")
+            entries.append(pathlib.Path(entry.path))
+
     links: dict[int, object] = {}
-    for path in sorted(root.iterdir()):
+    for path in sorted(entries):
         if not path.is_file():
             continue
         # ".json.gz" is eight characters; ".json" four. Stripping the wrong count

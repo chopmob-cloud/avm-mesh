@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.9.2 — capture directory hygiene
+
+Three defects that were named in the handover and left open, now closed. All three are in how a capture
+directory is read, which is a trust boundary: whatever is loaded here becomes evidence.
+
+### Fixed
+
+- **A symlinked capture is refused.** `path.is_file()` follows symlinks, so a link named `66457600.json`
+  pointing anywhere on the host was accepted and its bytes were parsed as a capture. The store already
+  refused symlinked entries; the anchor loader did not. Both `load_bundle` and the directory walk now refuse
+  a symlink and name the file. Hard links cannot be detected from a path, and the code says so rather than
+  implying it sees everything.
+- **Gzip is detected from the bytes, not the filename.** The magic bytes decide the decoder, so a capture
+  that was compressed and left with a `.json` name now loads instead of failing. The reverse is refused
+  outright: a `.gz` name over bytes that are not gzip is a name/content mismatch, and in a trust path that is
+  a reason to stop rather than to guess. The refusal says exactly that, instead of letting the JSON parser
+  report `Expecting value`.
+- **The directory cap is enforced while scanning.** `sorted(root.iterdir())` listed every entry before any
+  limit applied, so a directory with a million names was paid for in memory whether or not one capture was
+  read. The scan now refuses past `MAX_DIRECTORY_ENTRIES` (10240) as it goes, so memory tracks the cap rather
+  than the directory an attacker chose.
+
+### Verified
+
+Six tests added: five refusals and one positive control (`test_a_directory_within_the_cap_is_walked_normally`),
+so the cap cannot pass by refusing everything. Three of the guards are proven by mutation on Windows; the
+two symlink refusals cannot be, because this Windows host cannot plant a symlink without developer mode.
+Those two skip locally and are proven on Linux instead, where they run rather than skip, and where the
+guards were removed and the tests required to fail before being restored. A skip that hides an unproven guard is the failure
+mode this release is about, so the Linux run is the one that counts.
+
 ## 0.9.1 — close an ambiguity bypass found in review
 
 ### Fixed

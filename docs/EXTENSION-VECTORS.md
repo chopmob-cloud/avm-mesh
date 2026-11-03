@@ -35,7 +35,7 @@ convenience verifier that stayed quiet about the levels it skipped would be wors
 
 ## The cases
 
-Thirteen cases, both verdicts represented:
+Fourteen cases, both verdicts represented:
 
 | Case | Expected | Why it is in the set |
 |---|---|---|
@@ -52,6 +52,7 @@ Thirteen cases, both verdicts represented:
 | `canonical_is_not_json` | reject | a correct digest over bytes that are not JSON proves the bytes, not a receipt |
 | `missing_content_hash` | reject | nothing to compare against |
 | `two_payloads_ambiguous` | reject | two payloads is not a shape to resolve by taking the first |
+| `null_payload_then_valid_payload` | reject | a first part carrying a null receipt must not let a second part pass unnoticed |
 
 Plus one case that cannot live in a vector file because it is deliberately large:
 `test_an_oversized_canonical_blob_is_refused_before_decoding` builds a blob just over the cap in memory and
@@ -69,9 +70,11 @@ Each guard was removed and the corresponding case required to fail:
 | size cap before decoding | the oversized case fails |
 | `kind` contradiction check | `kind_contradicts_payload` fails |
 | library duplicate-payload guard | `two_payloads_ambiguous` diverges between the verifiers |
+| duplicate guard in either verifier, reverted to a value test | `null_payload_then_valid_payload` fails |
+| duplicate guard in either verifier, removed | `two_payloads_ambiguous` fails |
 
-All five go red on removal and green on restore, so the suite is measuring the guards rather than describing
-them.
+All of them go red on removal or on weakening, and green on restore, so the suite is measuring the guards
+rather than describing them.
 
 ## What these vectors do not prove
 

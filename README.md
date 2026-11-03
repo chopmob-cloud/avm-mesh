@@ -506,7 +506,7 @@ independent. That is what the check above is for.
 
 ## Status
 
-**Version `0.9.2`** — `pip install avm-mesh`.
+**Version `0.10.0`** — `pip install avm-mesh`.
 
 The portable test gate runs **391 tests with 0 skipped** on both Python 3.12 and Python 3.10.22 (an isolated
 clean-room run: offline install from wheels only, plus the trust-boundary audit and the red-team suite), so
@@ -532,7 +532,7 @@ built wheels offline and runs against site-packages.
 | Witness service (`serve`), content-addressed store, append-only receipts | shipped |
 | Level 3 consensus attestation, anchor-required | shipped |
 | Corroboration across witnesses (`corroborate`) | shipped 0.5.0 |
-| Anchor derivation (`anchor`): checkpoint walk over verified intervals | shipped 0.7.0 |
+| Anchor derivation (`anchor`): checkpoint walk over verified intervals | shipped 0.7.0; **proven across two intervals** in 0.10.0, see below |
 | Witness discovery (`--directory`, `/.well-known/mesh-directory.json`) | shipped 0.6.0 |
 | Worked mainnet example (`examples/`) | shipped 0.6.0 |
 | Service resource bounds (size cap, rate limit, slowloris timeout) | shipped 0.6.0 |
@@ -557,6 +557,20 @@ own semantics — only that carrying it breaks nothing. See [`docs/A2A-CONFORMAN
 holds fourteen cases (two must pass, twelve must refuse) and both verifiers — the library and
 `tools/verify_settlement_artifact.py`, which imports nothing from this project — are required to reach the
 same verdict on every one. See [`docs/EXTENSION-VECTORS.md`](docs/EXTENSION-VECTORS.md).
+
+**The anchor walk is now proven across two intervals, on real mainnet data.** Three consecutive captures —
+rounds `66606336`, `66606592`, `66606848` — are checked in under `examples/walk-mainnet-66606848/`, with
+hashes pinned in `provenance.json` and reproducible through `tools/fetch_walk_captures.py`. From the
+checkpoint at `66606336` the walk verifies two intervals and derives the input the target round is signed
+against. Until this release the walk had only ever been exercised over one interval, because a second
+capture was not available.
+
+Be careful what it establishes: all three captures came from **one public endpoint in one fetch**, so this
+proves the chaining mechanism, not source independence. `provenance.json` records that in its own
+`independence` field rather than leaving it to a reader to notice.
+`tests/test_walk_multi_interval.py` walks the captures offline and requires four hostile variants to be
+refused: a wrong anchor, a missing interval, a corrupted state proof, and a capture named for a round its
+proof does not attest.
 
 ## Honest limits
 

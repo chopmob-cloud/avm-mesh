@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.10.0 — the anchor walk, proven across two intervals
+
+A minor bump for a change in what the package has **proven**, not in what it does. No runtime behaviour
+changed.
+
+### Added
+
+- **Three consecutive mainnet captures**, `examples/walk-mainnet-66606848/` (rounds 66606336, 66606592,
+  66606848), with SHA-256 pinned in `provenance.json`.
+- **`tools/fetch_walk_captures.py`** — fetches consecutive state proofs from an algod endpoint and writes
+  them as walk captures, so anyone can reproduce or extend the evidence rather than take ours on trust. It
+  refuses a target round that is not an interval boundary, refuses fewer than two hops (one capture cannot
+  show chaining), and refuses a response whose message attests a different round than the one requested.
+- **`tests/test_walk_multi_interval.py`** — walks the checked-in captures offline: two intervals verified
+  from one pinned checkpoint, plus a single-hop control from the middle interval, plus four required
+  refusals (wrong anchor, missing interval, corrupted state proof, mislabelled capture).
+
+### What this changes, precisely
+
+The anchor walk shipped in 0.7.0 had only ever been exercised over one interval, because proving two needed
+a second capture and only one had been published. That was the weakest claim in the project: the module
+exists to carry trust across distance, and a one-hop demonstration is nearly the case it was designed to
+avoid. It now verifies two intervals from a single checkpoint on real mainnet data.
+
+### What this does not change
+
+The captures all came from **one public endpoint in one fetch**. This proves the chaining mechanism, not
+that the sources are independent: a single endpoint could in principle serve a consistent fiction, and only
+a second capture obtained independently would rule that out. `provenance.json` records this in an
+`independence` field, the test asserts the field is present, and the README says the same in fewer words.
+
+The anchor is still trust you supply. A walk that succeeds against a wrong checkpoint fails at the first
+link, which is the intended behaviour, but nothing here proves the checkpoint was ever the chain's real
+signing set.
+
 ## 0.9.2 — capture directory hygiene
 
 Three defects that were named in the handover and left open, now closed. All three are in how a capture

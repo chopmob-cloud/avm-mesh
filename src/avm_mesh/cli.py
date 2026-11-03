@@ -17,13 +17,69 @@ from .receipt import MeshError
 from .sealed import verify_sealed
 
 
-def _file_resolver(root: pathlib.Path):
+import json
+import os
+import pathlib
+import re
+import errno
+
+#: Anything reachable through `_file_resolver` must collapse to a single path component
+#: that is a normal file living directly under the evidence root. The same guard
+#: logic as `Store._safe_name`: no traversal, no symlinks, no absurd names.
+MAX_PROOF_BYTES_DEFAULT = 8 * 1024 * 1024
+
+_SAFE_NAME = re.compile(r"\A[A-Za-z0-9_.-]{1,128}\Z")
+
+def _file_resolver(root: pathlib.Path, *, max_bytes: int | None = None):
+    root = pathlib.Path(root).absolute()
+    if max_bytes is None:
+        max_bytes = MAX_PROOF_BYTES_DEFAULT
+
     def resolve(uri: str):
         name = uri.rsplit("/", 1)[-1]
+        if not _SAFE_NAME.match(name) or name in (".", ".."):
+            raise FileNotFoundError(uri)
         path = root / name
-        if not path.is_file():
+        # `os.stat(..., follow_symlinks=False)` is not enough on its own: a Windows
+        # host has neither O_NOFOLLOW nor follow-symlinks-independent stat semantics
+        # that refuse symlinks by default. An explicit is_symlink() check closes the
+        # common case (non-atomic, but better than the original unconditional
+        # follow); `O_NOFOLLOW` still atomically catches the race on platforms that
+        # support it.
+        if path.is_symlink():
             raise FileNotFoundError(path)
-        return json.loads(path.read_text(encoding="utf-8"))
+        # Open with O_NOFOLLOW so a path that becomes a symlink during traversal is
+        # still refused atomically on platforms that support it.
+        try:
+            fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+                          | getattr(os, "O_CLOEXEC", 0))
+        except (OSError,) as exc:
+            # Acceptable misses: ENOENT/ENOTDIR/ELOOP/EISDIR/ENAMETOOLONG mean
+            # "no readable regular file exists here", and callers catching
+            # FileNotFoundError expect exactly that. Permission errors, EMFILE, and other
+            # I/O failures keep their own type so a caller can retry or escalate.
+            if getattr(exc, "errno", None) in (errno.ENOENT, errno.ENOTDIR, errno.ELOOP, errno.EISDIR, errno.ENAMETOOLONG):
+                raise FileNotFoundError(path)
+            raise
+        try:
+            st = os.fstat(fd)
+            if (st.st_mode & 0o170000) != 0o100000:
+                raise FileNotFoundError(path)
+            if st.st_size > max_bytes:
+                raise ValueError(f"{path} is {st.st_size} bytes, over the {max_bytes} byte cap")
+            data = os.read(fd, max_bytes + 1)
+            if len(data) > max_bytes:
+                raise ValueError(f"{path} is at least {len(data)} bytes, over the {max_bytes} byte cap")
+        finally:
+            os.close(fd)
+        try:
+            text = data.decode("utf-8-sig")
+        except UnicodeDecodeError as exc:
+            raise ValueError(f"{path} is not valid UTF-8 JSON: {exc}")
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise json.JSONDecodeError(f"{path}: {exc.msg}", exc.doc, exc.pos) from exc
     return resolve
 
 

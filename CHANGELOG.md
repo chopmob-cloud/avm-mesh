@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.10.1 — hardening: sealed resolver (§6.1 of the external validation)
+
+### Fixed
+
+- **`_file_resolver` no longer follows symlinks or reads unbounded files.** The offline
+  `avm-mesh verify --evidence <dir>` resolver resolved `path = root / uri.rsplit("/", 1)[-1]`
+  and then read the file with no size check and no symlink check, unlike `Store._safe_name`,
+  which hardens the same operation. A directory holding a symlink named for a digest, or a
+  renamed multi-gigabyte file, could exfiltrate or exhaust memory from a local verifier.
+  The name is now restricted to `[A-Za-z0-9_.-]{1,128}`, the path is refused if it is a
+  link (on POSIX `O_NOFOLLOW` does this atomically; on Windows an explicit pre-open
+  `is_symlink()` covers the common case, though it has a well-known TOCTOU window that
+  cannot be closed without OS-level `O_NOFOLLOW`).
+  (`MAX_PROOF_BYTES_DEFAULT`, 8 MiB).
+  Found by the static review in `docs/avm-mesh-v0.10.0-validation.md` (§6.1).
+
+### Changed
+- Runtime behaviour changed, but only to refuse more safely: the resolver is now a
+  fail-closed file reader instead of a plain `read_text` call, matching `Store`'s
+  behaviour. No on-chain claims, wire formats, thresholds or CLI command surfaces
+  changed.
+
 ## 0.10.0 — the anchor walk, proven across two intervals
 
 A minor bump for a change in what the package has **proven**, not in what it does. No runtime behaviour

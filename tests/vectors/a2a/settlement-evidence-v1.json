@@ -256,6 +256,34 @@
           }
         ]
       }
+    },
+    {
+      "name": "null_payload_then_valid_payload",
+      "expect": "reject",
+      "why": "a first part carrying a null receipt must not let a second part pass unnoticed",
+      "artifact": {
+        "artifact_id": "x",
+        "parts": [
+          {
+            "data": {
+              "avm_mesh_receipt": null,
+              "extension": "https://algovoi.co.uk/a2a/extensions/settlement-evidence/v1"
+            },
+            "mediaType": "application/json"
+          },
+          {
+            "data": {
+              "avm_mesh_receipt": {
+                "canonical_bytes_b64": "eyJpc3N1ZXJfZGlkIjoiZGlkOmV4YW1wbGU6diIsInNldHRsZW1lbnQiOnsiYW1vdW50X21pY3JvdW5pdHMiOiIxMDAwMDAwIiwidHhfaWQiOiJWRUNUT1ItMSJ9fQ==",
+                "content_hash": "3a4194ae2d628b7d15b081dbd9b7950fc28472e6031989896616fbb06e1696a4",
+                "evidence_uri": "file://proofpack.json"
+              },
+              "extension": "https://algovoi.co.uk/a2a/extensions/settlement-evidence/v1"
+            },
+            "mediaType": "application/json"
+          }
+        ]
+      }
     }
   ]
 }

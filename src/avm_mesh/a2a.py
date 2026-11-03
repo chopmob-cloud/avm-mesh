@@ -120,6 +120,7 @@ def verify_artifact(artifact: dict, resolve: Callable[[str], dict],
         raise MeshError("artifact has no parts")
 
     payload = None
+    seen_extension_part = False
     for part in parts:
         if not isinstance(part, dict):
             continue
@@ -133,12 +134,15 @@ def verify_artifact(artifact: dict, resolve: Callable[[str], dict],
             continue
         data = part.get("data")
         if isinstance(data, dict) and data.get("extension") == EXTENSION_URI:
-            if payload is not None:
+            if seen_extension_part:
                 # Two payloads is not a shape to resolve by taking the first: a
                 # sender who means one thing does not send two, and a receiver
                 # that silently picks one can disagree with another receiver
-                # reading the same artefact.
+                # reading the same artefact. Counted by part rather than by
+                # payload value, so a first part carrying a null receipt cannot
+                # smuggle a second one past this check.
                 raise MeshError("artifact carries more than one settlement-evidence payload")
+            seen_extension_part = True
             payload = data.get("avm_mesh_receipt")
 
     if payload is None:

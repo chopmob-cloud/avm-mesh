@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.9.1 — close an ambiguity bypass found in review
+
+### Fixed
+
+- **A part carrying the extension but a null receipt no longer lets a second payload through.** Both
+  verifiers detected duplicate payloads by testing whether the payload value was non-`None`, so
+  `[{extension, receipt: null}, {extension, receipt: <valid>}]` was accepted by both: the ambiguity check
+  was skipped by the very shape it exists to refuse. Both now count extension-bearing parts, and
+  `null_payload_then_valid_payload` is the fourteenth vector, required to be refused by both.
+
+Found by the independent validation gate on 0.9.0. Two of its three other findings were refuted with
+reproductions rather than applied: the claimed missing `kind`-tag check is present at `a2a.py:132` and the
+`kind_contradicts_payload` vector is refused by the library, and the claimed misspelling of
+`MAX_CANONICAL_B64_CHARS` does not exist in the file.
+
 ## 0.9.0 — extension conformance vectors and a standalone verifier
 
 ### Added

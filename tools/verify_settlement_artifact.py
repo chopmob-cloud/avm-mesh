@@ -51,6 +51,7 @@ def _find_payload(artifact: object) -> dict:
         raise Refused("artefact has no parts list")
 
     payload = None
+    seen_extension_part = False
     for part in parts:
         if not isinstance(part, dict):
             continue
@@ -63,8 +64,11 @@ def _find_payload(artifact: object) -> dict:
             continue
         data = part.get("data")
         if isinstance(data, dict) and data.get("extension") == EXTENSION_URI:
-            if payload is not None:
+            # Counted by part, not by payload value: a part carrying a null
+            # receipt must not allow a second part to pass unnoticed.
+            if seen_extension_part:
                 raise Refused("artefact carries more than one settlement-evidence payload")
+            seen_extension_part = True
             payload = data.get("avm_mesh_receipt")
 
     if payload is None:

@@ -224,9 +224,14 @@ def test_a_normal_bundle_still_loads(tmp_path):
 
 
 def test_a_corrupt_gzip_is_refused_not_crashed(tmp_path):
+    """Named .gz but not gzip data: refused, and the message names the mismatch.
+
+    The refusal still comes from the loader rather than from the JSON parser, because
+    "Expecting value" tells a caller nothing about a file they believe is compressed.
+    """
     path = tmp_path / "b.json.gz"
     path.write_bytes(b"not a gzip stream")
-    with pytest.raises(MeshError, match="cannot read"):
+    with pytest.raises(MeshError, match="named .gz but does not begin with gzip data"):
         load_bundle(path)
 
 
@@ -297,3 +302,97 @@ def test_an_absurd_interval_count_is_refused():
     with pytest.raises(MeshError, match="over the .* limit"):
         links_from_directory(_capture(), base64.b64decode(GENESIS),
                              rounds=set(range(0, 5000 * 256, 256)))
+
+
+# ---------------------------------------------------- capture directory hygiene
+#
+# Three defects named in the handover, each closed here: a symlink inside a capture
+# directory was followed, the gzip decision came from the filename rather than the
+# bytes, and the directory cap was applied only after every entry had been listed.
+
+
+def test_load_bundle_refuses_a_symlinked_capture(tmp_path):
+    """A capture is a file placed here, not a pointer to somewhere else.
+
+    `is_file()` follows symlinks, so without this refusal a link named for a round
+    would be read from outside the directory the operator was asked to trust, and its
+    bytes would become evidence.
+    """
+    outside = tmp_path / "elsewhere.json"
+    outside.write_text(json.dumps({"not": "a capture"}), encoding="utf-8")
+    link = tmp_path / "66457600.json"
+    try:
+        link.symlink_to(outside)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks not supported in this environment")
+
+    with pytest.raises(MeshError, match="symlink"):
+        load_bundle(link)
+
+
+def test_links_from_directory_refuses_a_symlinked_capture(tmp_path):
+    """The refusal names the file, and happens before any decoding."""
+    target = tmp_path / "real.json"
+    target.write_text(json.dumps(_bundle()), encoding="utf-8")
+    link = tmp_path / f"{TARGET}.json"
+    try:
+        link.symlink_to(target)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks not supported in this environment")
+
+    with pytest.raises(MeshError, match="symlink"):
+        links_from_directory(tmp_path, base64.b64decode(GENESIS))
+
+
+def test_gzip_is_detected_from_the_bytes_not_the_name(tmp_path):
+    """A `.json` file that is really gzip loads: the bytes decide the decoder.
+
+    This is the accident worth tolerating -- a capture compressed and left with its
+    plain name. The reverse is refused rather than tolerated: a `.gz` name over bytes
+    that are not gzip means the file is not what the operator believes it is, and in a
+    trust path a name/content mismatch is a reason to stop, not to guess.
+    """
+    body = json.dumps(_bundle()).encode()
+    compressed = tmp_path / "66457600.json"
+    with gzip.open(compressed, "wb") as handle:
+        handle.write(body)
+    assert compressed.suffix == ".json"
+    assert load_bundle(compressed) == _bundle()
+
+    mislabelled = tmp_path / "66457728.json.gz"
+    mislabelled.write_bytes(body)
+    assert mislabelled.suffix == ".gz"
+    with pytest.raises(MeshError, match="named .gz but does not begin with gzip data"):
+        load_bundle(mislabelled)
+
+
+GZIP_HEADER_TRUNCATED = b"\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03" + b"\x00" * 8
+
+
+def test_a_truncated_gzip_is_refused_whatever_it_is_called(tmp_path):
+    """Sniffing by magic must not lose the error handling the suffix path had."""
+    truncated = tmp_path / "66457600.json"
+    truncated.write_bytes(GZIP_HEADER_TRUNCATED)
+    with pytest.raises(MeshError, match="cannot read"):
+        load_bundle(truncated)
+
+
+def test_the_directory_cap_applies_while_scanning(tmp_path, monkeypatch):
+    """The cap must bite during enumeration, not after it.
+
+    Every entry is listed before the loop can look at any of them, so a limit checked
+    inside the loop bounds loading but not the listing. Lowered here so the test does
+    not have to create ten thousand files.
+    """
+    monkeypatch.setattr(anchor_module, "MAX_DIRECTORY_ENTRIES", 4)
+    for i in range(6):
+        (tmp_path / f"stray-{i}.txt").write_text("x", encoding="utf-8")
+
+    with pytest.raises(MeshError, match="more than 4 entries"):
+        links_from_directory(tmp_path, base64.b64decode(GENESIS))
+
+
+def test_a_directory_within_the_cap_is_walked_normally():
+    """The cap must not refuse an ordinary single-capture directory."""
+    result = _walk(_bundle(), _capture())
+    assert result.ok, result.failure

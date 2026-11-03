@@ -7,7 +7,7 @@
 > | Fact | Value |
 > |---|---|
 > | Version | `0.7.1`, live on PyPI as wheel and sdist |
-> | Reviewed commit | `c0b25c8` on `main` |
+> | Reviewed commit | `c0b25c8` on `main` for 0.7.1; `0.8.0` adds the testnet PoC, see `CHANGELOG.md` and `docs/POC-RUNBOOK.md` |
 > | Python floor | 3.10, executed in a container rather than asserted |
 > | Runtime deps | `avm-proofpack>=0.4.1`, `avm-effectproof>=0.1.1` |
 >

@@ -1,5 +1,49 @@
 # Changelog
 
+## 0.8.0 — testnet witness-bonding proof of concept
+
+New public surface, all of it testnet-only and declared-value-only. The limits are
+stated here because they are the point of the release, not a footnote to it.
+
+### Added
+
+- **`bond.BondPolicy`** — a declared-bond floor and a slash fraction, with exact
+  rational arithmetic (no binary float). Threaded through `WitnessSet` and
+  `validate_corroboration`; the defaults reproduce the previous constants, so
+  existing callers behave identically.
+- **`poc.EnforcementLedger` and `poc.verify_ledger`** — the challenge flow:
+  examine a witness's attestation against the challenger's own anchor, and on a
+  failed verification record a REMOVED event and mark the witness inactive. The
+  log is hash-chained, truncation-evident through a head sidecar, written
+  durably before the decision takes effect, and guarded against a second writer
+  forking it. Tamper **evident**, not tamper proof: rewriting both the log and
+  the sidecar, or rolling back an uncheckpointed tail, needs an externally
+  retained `expected_head_hash` to detect.
+- **`testnet-v1.0`** admitted to `SUPPORTED_CHAINS`. Algorand testnet emits
+  Falcon-1024 state proofs, so the PoC runs on real evidence. Isolation is
+  enforced, not asserted: a testnet attestation is refused where the mainnet
+  genesis is pinned, with a control proving the same attestation verifies under
+  its own pin.
+- **`examples/testnet-proofpack-68812906.json`** plus
+  `examples/testnet_poc_demo.py`, and **`docs/POC-RUNBOOK.md`**.
+- **`docs/BONDING-DECISIONS.md`** — the decision surface offered to the Algorand
+  and VOI communities, with a bootstrap configuration so the flow can be
+  exercised before any lasting parameter is set.
+
+### Not included, deliberately
+
+- **No escrow reader, and therefore no on-chain verification of a bond.** A bond
+  is a declaration; `escrow_txid` is an assertion. Reading an account balance
+  would not fix that, because a balance is not a commitment: the operator can
+  withdraw it at will. Verification needs an escrow *application* that holds the
+  funds and enforces the conditions, and that needs the four parameters this
+  release declines to invent. Adding a balance check here would have looked like
+  progress and proved nothing.
+- **No slashing.** A failed challenge removes the witness administratively and
+  records the event. No funds move.
+- **Testnet consensus is testnet-grade security.** Nothing in this release should
+  be described as production security.
+
 ## 0.7.1 — test packaging correction (no runtime change)
 
 The published 0.7.0 sdist carried three tests that call a Falcon-1024 signer.

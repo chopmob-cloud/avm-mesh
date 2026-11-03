@@ -46,4 +46,4 @@ __all__ = [
     "create_receipt",
     "verify_receipt",
 ]
-__version__ = "0.7.1"
+__version__ = "0.8.0"

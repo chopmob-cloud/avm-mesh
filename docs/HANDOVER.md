@@ -10,7 +10,7 @@ and who or what each blocked item waits on. Nothing here claims a capability tha
 | Local path | `***REMOVED***` |
 | Remote | `github.com/chopmob-cloud/avm-mesh` (private) |
 | Branch | `main` @ `ac92eb0`, working tree clean, local equals origin |
-| Version | `0.7.1`, published to PyPI (wheel + sdist), metadata verified from the index |
+| Version | `0.8.0` (testnet bonding PoC), published to PyPI as wheel and sdist |
 | Python floor | `>=3.10`, executed in a container rather than asserted |
 | Runtime deps | `avm-proofpack>=0.4.1`, `avm-effectproof>=0.1.1` |
 | Sibling repos | `***REMOVED***`, `***REMOVED***`; proofpack fixtures live in the former |
@@ -100,7 +100,7 @@ perform an independent review of my own dependencies.
 
 ## Things that look like blockers and are not
 
-- **PyPI publication**: done. 0.7.1 is live, installed from the index in a fresh venv, console script
+- **PyPI publication**: done. 0.8.0 is live, installed from the index in a fresh venv, console script
   exercised.
 - **Licence and metadata**: done. `LICENSE` and `NOTICE` in repository, wheel and sdist; PEP 639
   `License-Expression`; no contradicting classifier; verified inside the published wheel.
@@ -132,11 +132,23 @@ perform an independent review of my own dependencies.
 - `docs/REVIEW-REQUEST.md` described 0.4.2 with 226 tests and claimed the package was not on PyPI. It now
   leads with current state and keeps the old body as history.
 
+## The testnet PoC (0.8.0) and what it does not change
+
+`poc.EnforcementLedger` and `bond.BondPolicy` make the challenge flow runnable end to end on Algorand
+testnet: attest, challenge against the challenger's own anchor, record an administrative removal, and keep
+the decisions in a hash-chained log that detects tampering and truncation. `docs/POC-RUNBOOK.md` states what
+it proves; the short version is that it proves the detection and the flow, not economic security.
+
+None of the four blockers above are closed by it. In particular, no escrow reader was added, and that was a
+decision rather than an omission: reading an account balance would not make a bond a commitment, because the
+operator can withdraw it. Verification needs an escrow application holding the funds, which needs the four
+parameters.
+
 ## How to re-run everything
 
 ```sh
 # portable suite (361 passed, 0 skipped)
-pip install avm-mesh==0.7.1 pytest
+pip install avm-mesh==0.8.0 pytest
 AVM_PROOFPACK_TESTS=<avm-proofpack-checkout>/tests AVM_MESH_REQUIRE_FIXTURE=1 \
   python -m pytest tests -q -m 'not signer'
 

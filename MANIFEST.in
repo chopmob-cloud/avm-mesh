@@ -5,4 +5,4 @@ include LICENSE NOTICE README.md CHANGELOG.md
 recursive-include tests *.py *.json
 recursive-include tools *.py *.sh
 recursive-include docs *.md
-recursive-include examples *.json
+recursive-include examples *.json *.json.gz

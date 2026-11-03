@@ -51,21 +51,26 @@ fields, the command to run on receipt, and the meaning of each exit code.
 
 **Effort once supplied**: half a day, including a regression test built on the real fixture.
 
-### 2. A second independent state-proof capture (blocks the anchor walk claim)
+### 2. A second independent state-proof capture (blocks the anchor walk's independence claim)
 
-**What is missing**: one `.json.gz` state-proof bundle for an interval adjacent to or overlapping round
-`66457600`, produced by a node run by a different operator.
+**Partly closed in 0.10.0.** The walk is now proven across two intervals on real mainnet data:
+`examples/walk-mainnet-66606848/` holds three consecutive captures (66606336, 66606592, 66606848) with
+pinned hashes, and `tests/test_walk_multi_interval.py` walks them offline. The chaining mechanism is no
+longer a one-hop demonstration.
 
-**What already exists**: `avm-mesh anchor` walks forward from a pinned checkpoint and is tested against the
-single real interval in `avm-proofpack/tests/fixtures/`. One interval proves the mechanism.
+**What is still missing**: those three captures came from **one public endpoint in one fetch**, so they
+prove the mechanism, not that the source is independent or honest. Closing that needs one capture of an
+adjacent interval from a node run by a different operator, and a walk that mixes the two.
 
-**What is unproven**: that the walk is not merely reading one operator's private view. That claim needs a
-second source, and inventing one would make the suite green and the capability false.
+**What is unproven**: that the walk is not merely reading one operator's private view. Inventing a second
+source would make the suite green and the capability false.
 
 **Who owns it**: an operator with a node. `docs/OPERATOR-RUNSHEET.md` section A gives the collection command
-and the acceptance command.
+and the acceptance command; `tools/fetch_walk_captures.py` is what produced the checked-in set.
 
-**Effort once supplied**: one day, including removing the single-interval caveat from `examples/`.
+**Effort once supplied**: half a day — fetch one adjacent interval from the second operator, add it to the
+directory, assert that the walk verifies with captures drawn from both sources, and update the
+`independence` field in `provenance.json` from "not source independence" to what the mixed walk establishes.
 
 ### 3. Four economic decisions (blocks on-chain bonding entirely)
 

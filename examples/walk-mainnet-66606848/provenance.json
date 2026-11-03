@@ -1,0 +1,37 @@
+{
+  "chain": "algorand-mainnet",
+  "genesis_hash_b64": "wGHE2Pwdvd7S12BL5FaOP20EGYesN73ktiC1qzkkit8=",
+  "endpoint": "https://mainnet-api.algonode.cloud",
+  "interval": 256,
+  "target_round": 66606848,
+  "hops": [
+    66606336,
+    66606592,
+    66606848
+  ],
+  "fetched_at_utc": "2026-11-03T16:37:19Z",
+  "independence": "all captures came from one endpoint; this proves chaining, not source independence",
+  "files": [
+    {
+      "round": 66606336,
+      "file": "66606336.json.gz",
+      "sha256": "4ff62ee235687f118f8322d45763e11665f473589689b18c9bdacc5d2f06583f",
+      "state_proof_bytes": 310741,
+      "ln_proven_weight": 2230419
+    },
+    {
+      "round": 66606592,
+      "file": "66606592.json.gz",
+      "sha256": "4483d3c91da611c80a63eaa4011fca0925394d0e027f0a4c5badb68504f4db62",
+      "state_proof_bytes": 294064,
+      "ln_proven_weight": 2230419
+    },
+    {
+      "round": 66606848,
+      "file": "66606848.json.gz",
+      "sha256": "e6e3df2998673135439b678055500d92efc045e597e86001a41804a9abacc585",
+      "state_proof_bytes": 301793,
+      "ln_proven_weight": 2230417
+    }
+  ]
+}

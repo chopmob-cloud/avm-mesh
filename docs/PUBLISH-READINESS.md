@@ -46,7 +46,7 @@ These are capability-maturity gaps, not security defects. Publishing with them o
 - [ ] Decide whether to publish at the current 0.10.2 version or wait for an external deliverable (a genuine rails receipt, say) so the first public source matches the first public capability claim.
 - [ ] Confirm commit author identity and history are acceptable as committed (`AlgoVoi <chopmob@gmail.com>`). Some early commits or handovers may contain personal notes.
 - [ ] Confirm PyPI project name `avm-mesh` stays free/owned (already published).
-- [ ] Final pass on `README.md` tone and "Honest limits" section for general-audience readers.
+- [x] ~~Final pass on `README.md`~~ — **every documented command was run against the published wheel**, not read. Both chains verify from PyPI (Algorand and Voi, output reproduced byte for byte). The audit found two real defects: the CLI could not read a gzipped proofpack, and a text-mode `os.open` truncated files at the first `0x1A` on Windows — the Voi fixture stopped at 100 of 110,773 bytes. Both fixed in 0.12.0. Community files added: `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, issue and PR templates.
 - [ ] Repo cosmetics: add topics (`algorand`, `voi`, `state-proofs`, `falcon`, `settlement`, `x402`, `a2a`), set a homepage, and delete the nine stale branches listed in the audit (including `claude/vigilant-volta-3kjwyy`, which would delete 13,288 lines if merged).
 
 ## Verdict

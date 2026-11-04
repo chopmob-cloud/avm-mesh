@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.10.2 — hardening: bounded rate-limiter table (§6.2 of the external validation)
+
+### Fixed
+- **Rate-limiter table is now bounded on every call.** The previous implementation pruned expired
+  entries only once the table exceeded 10 000 keys, so under a flood from many short-lived addresses the
+  table could stay full of live windows for the duration of the window (10 s) without any pruning and grow
+  past 10 000; even at threshold, only expired windows were removed, leaving no room for new active peers.
+  Pruning now happens on every request, and when the table is full and the client is new, the oldest tracked
+  peer is evicted (insertion order) so the table converges on at most 10 000 concurrent buckets. Two requests
+  from the same address can no longer collide with a foreign address's window; the candidate identifier is
+  never read from a forwarded header, only from the socket peer, so the only way to grow it is actual source
+  addresses.
+  Found by the static review in `docs/avm-mesh-v0.10.0-validation.md` (§6.2).
+
+### Changed
+- No wire, version-pin, or on-chain claim changes.
+
 ## 0.10.1 — hardening: sealed resolver (§6.1 of the external validation)
 
 ### Fixed

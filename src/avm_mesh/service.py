@@ -297,12 +297,15 @@ def _make_handler(store: Store, info: WitnessInfo | None,
     def rate_limited(address: str) -> bool:
         now = time.monotonic()
         with seen_lock:
-            if len(seen) > 10_000:
-                # Drop windows that have already expired. Without this the table is a
-                # memory sink for anyone able to source requests from many addresses.
-                for key in [k for k, (start, _) in seen.items()
-                            if now - start >= rate_window_s]:
-                    del seen[key]
+            # `seen` is bounded to 10 000 concurrent peers by the eviction below, so an
+            # expired window does not need a table-wide scan - it is overwritten (if the
+            # address is the one that expired) or evicted by insertion order (if another
+            # peer needs the slot). A full-table prune was O(n) per request and became
+            # its own CPU-exhaustion path under the same flood it was meant to contain.
+            if address not in seen and len(seen) >= 10_000:
+                oldest = next(iter(seen), None)
+                if oldest is not None:
+                    del seen[oldest]
             window_start, count = seen.get(address, (now, 0))
             if now - window_start >= rate_window_s:
                 seen[address] = (now, 1)

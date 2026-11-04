@@ -1,5 +1,52 @@
 # Changelog
 
+## 0.12.0 — the Voi example verifies, and it found a Windows read bug
+
+Publishing readiness work: every command in the README was run against the published package
+rather than read, and the Voi example was exercised end to end for the first time.
+
+### Fixed
+
+- **`avm-mesh verify` could not read a gzipped proofpack at all.** The Voi example ships as
+  `.json.gz` and the resolver decoded bytes as UTF-8 regardless, so the only way to check the
+  second chain from the CLI failed on the gzip header. Compression is now detected from the
+  magic bytes, not the filename, with the decompressed size capped at the same limit as the
+  stored file.
+- **`os.open` without `O_BINARY` truncated files at the first `0x1A` on Windows.** A text-mode
+  descriptor treats `0x1A` as EOF, and a gzip envelope contains that byte almost immediately:
+  the Voi fixture stopped at **100 of its 110,773 bytes**. Plain JSON never contains `0x1A`,
+  which is why the shipped Algorand example passed and hid this for every release since the
+  resolver was written. Both the gzip and the `O_BINARY` defects are one bug in practice —
+  neither is visible without the other, which is why they survived so long.
+
+### Added
+
+- **`examples/receipt-voi-24213754.json`** — a verifiable Voi receipt, so the second chain can
+  be checked from the command line instead of taken on trust. Produced by
+  `tools/make_voi_example.py`, which prints the exact `avm-mesh verify` invocation including
+  the anchor it used and the caveat that the anchor is the bundle's own previous message.
+- **`cli.read_bounded_bytes`** — the byte read extracted from the resolver so it can be tested
+  without a JSON layer in the way. That seam was necessary: the `0x1A` bug could not be
+  reproduced through the resolver, because the JSON parser rejected the fixture whether or not
+  the read truncated, so three earlier attempts at this test measured the parser instead of the
+  reader and passed with the fix reverted.
+- **`tests/test_cli_gzip.py`** — nine tests over the reader and the resolver: a `0x1A` byte, a
+  binary gzip envelope, a gzip bomb past the cap, a lying `.gz` name, a truncated stream, a
+  symlink, and the shipped Voi example.
+- **`CONTRIBUTING.md`**, **`CODE_OF_CONDUCT.md`**, an issue template and a pull-request
+  template, because a public repository needs to say how to report something and what standard
+  applies. The conduct document is written for this project rather than adopted from a generic
+  template, and says so.
+
+### Verified
+
+Mutation-checked against the library, not the test text: removing `O_BINARY` makes the `0x1A`
+test fail, removing gzip handling makes two fail, removing the decompressed-size cap makes the
+bomb test fail, removing the symlink refusal makes the symlink test fail. All restored green.
+
+The README's Algorand command and its documented output were reproduced byte for byte from the
+published 0.11.1 wheel before this change, and again afterwards at 0.12.0.
+
 ## 0.11.1 — every entry point actually runs
 
 A sweep of every script and entry point in the repository, on the principle that a tool nothing invokes does

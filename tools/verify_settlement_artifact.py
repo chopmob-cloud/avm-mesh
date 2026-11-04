@@ -130,6 +130,20 @@ def verify(artifact: object) -> dict:
 
 
 def main(argv: list[str]) -> int:
+    # Only these two spellings mean "help": `--helpful` or a filename containing "-h"
+    # must not be swallowed, so the flag list is compared exactly, not by substring.
+    for flag in argv:
+        if flag in ("-h", "--help"):
+            print("usage: python verify_settlement_artifact.py <artefact.json> [--json]")
+            print()
+            print("Standalone verifier for the settlement-evidence A2A artefact.")
+            print("Checks the envelope and LEVEL 1 integrity; reports LEVEL 2 (signature) and")
+            print("LEVEL 3 (consensus) as 'not checked' rather than omitting them.")
+            print()
+            print("  --json   emit the report as JSON")
+            print()
+            print("Exit codes: 0 verified, 1 refused, 2 usage.")
+            return 0
     args = [a for a in argv if not a.startswith("-")]
     if not args:
         print("usage: python verify_settlement_artifact.py <artefact.json> [--json]", file=sys.stderr)

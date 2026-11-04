@@ -105,6 +105,25 @@ def test_the_tool_imports_nothing_from_algovoi():
         assert forbidden not in source, forbidden
 
 
+def test_help_is_exact_not_a_substring():
+    """`--helpful` is an unknown argument, not a request for help.
+
+    A substring test (`"-h" in argv`) swallows both, and would also swallow a filename
+    containing "-h". The distinction matters because a mistyped flag should reach the
+    usage-error path, not print help and exit 0 as though it had been understood.
+    """
+    for flag in ("--help", "-h"):
+        run = subprocess.run([sys.executable, str(TOOL), flag], capture_output=True, text=True)
+        assert run.returncode == 0, f"{flag} exited {run.returncode}"
+        assert "usage:" in run.stdout
+
+    for not_help in ("--helpful", "-hh", "--hel"):
+        run = subprocess.run([sys.executable, str(TOOL), not_help],
+                             capture_output=True, text=True)
+        assert run.returncode == 2, f"{not_help} should be a usage error, got {run.returncode}"
+        assert "usage:" in run.stderr, f"{not_help} printed no usage line on stderr"
+
+
 def test_an_oversized_canonical_blob_is_refused_before_decoding():
     """The bound must bite before base64 decode, not after.
 

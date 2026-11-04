@@ -1,5 +1,51 @@
 # Changelog
 
+## 0.11.1 — every entry point actually runs
+
+A sweep of every script and entry point in the repository, on the principle that a tool nothing invokes does
+not fail — it silently stops being true. Four defects, all found by running things rather than reading them.
+
+### Fixed
+
+- **`avm-mesh verify` reported a usage error as 2, not the documented 3.** `cli.py` and the README both say
+  "0 verified, 2 failed, 3 usage error", but argparse exits 2 on a bad argument, so a malformed invocation was
+  indistinguishable from a receipt that failed to verify — the distinction an operator alerts on. The
+  documented contract now holds.
+- **The rails drop-in's exit translation could never fire.** `rails/__main__.py` maps 3 -> 2 so a drop-in
+  matches the tool it replaces, but argparse's own 2 reached the caller first. It only looked correct because
+  the wrong number happened to equal the right one. The mapping is now exercised, and pinned by a test.
+- **`tools/exercise_serve.py` was a script nothing ran**, and had rotted: no `__main__` guard, so importing it
+  started a server on port 8099; no `--help`; an uncaught traceback on any usage; and a server left running if
+  a probe raised partway through. Rewritten as a program that exits 1 when a probe misbehaves and 2 when it
+  cannot run, and wired into the cleanroom gate as stage 6 so it is exercised against the installed wheel over
+  a real socket.
+- **`tools/check_artifacts.py` and `tools/make_example.py` treated `--help` as a path**, printing "no such
+  directory" or "fixture not found" and exiting 0. Both now parse arguments properly.
+
+### Added
+
+- `tests/test_cli_exit_codes.py` — pins the exit-code contract at both entry points through subprocesses,
+  including that a malformed invocation is distinguishable from a failed verification.
+- `tests/test_tools.py` — every script in `tools/` must print a usage line for `--help` and must not run on
+  import, with an explicit exclusion list for the A2A SUT (a server) that fails if the list goes stale.
+- `tools/mutation_check.py` — reproduces the mutation evidence instead of asserting it. For each guard it runs
+  the tests, removes the guard, requires the matching test to fail, restores the file byte-for-byte, and
+  requires it to pass again. Run it with no arguments; exit 0 means every guard bit and every file was
+  restored. It normalises line endings before matching, because a CRLF checkout made every multi-line anchor
+  miss and silently turned the mutation into a no-op that reported "STILL GREEN".
+
+### Verified
+
+All five guards are proven load-bearing by `tools/mutation_check.py`: the usage-error translation (two tests
+fail without it), the rails exit map, the rails hex signing convention, the `exercise_serve` `__main__` guard,
+and the standalone verifier's help flag.
+
+One review finding was **wrong and is recorded rather than silently obeyed**. A reviewer claimed
+`if "-h" in argv` was a substring match that would swallow `--helpful`. It never was: `in` on a list is
+membership, so `"-h" in ["--helpful"]` is `False` and the two forms behave identically. Verified by mutation
+before changing anything. The code was rewritten anyway because a per-flag loop reads more plainly, and a test
+now pins that `--help` exits 0 while `--helpful` exits 2 — but no defect was fixed, because there was none.
+
 ## 0.11.0 — Voi, proven rather than assumed
 
 Every previous Voi reference in this repository was a label. `chain="voimain-v1.0"` was passed to bond and

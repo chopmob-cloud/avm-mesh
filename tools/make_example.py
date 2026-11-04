@@ -32,6 +32,7 @@ more than this file establishes.
 """
 from __future__ import annotations
 
+import argparse
 import base64
 import gzip
 import json
@@ -45,9 +46,17 @@ GENESIS = "wGHE2Pwdvd7S12BL5FaOP20EGYesN73ktiC1qzkkit8="
 
 
 def main(argv: list[str]) -> int:
-    fixture = pathlib.Path(argv[1] if len(argv) > 1 else
-                           os.environ.get("AVM_MESH_FIXTURE", str(DEFAULT_FIXTURE)))
-    outdir = pathlib.Path(argv[2] if len(argv) > 2 else "examples")
+    parser = argparse.ArgumentParser(
+        description="Produce the worked example receipt and proofpack from real mainnet evidence.")
+    parser.add_argument("fixture", nargs="?", default=None,
+                        help=f"captured proofpack (default: $AVM_MESH_FIXTURE or {DEFAULT_FIXTURE})")
+    parser.add_argument("outdir", nargs="?", default="examples",
+                        help="directory to write into (default: examples)")
+    args = parser.parse_args(argv[1:])
+
+    fixture = pathlib.Path(args.fixture if args.fixture is not None
+                           else os.environ.get("AVM_MESH_FIXTURE", str(DEFAULT_FIXTURE)))
+    outdir = pathlib.Path(args.outdir)
     if not fixture.exists():
         print(f"fixture not found: {fixture}", file=sys.stderr)
         return 3

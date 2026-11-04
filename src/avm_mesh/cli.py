@@ -338,7 +338,16 @@ def main(argv: list[str] | None = None, *, signature_style: str = "raw") -> int:
     if signature_style not in ("raw", "hex"):
         raise ValueError(f"unknown signature_style {signature_style!r}")
     parser = _build_parser()
-    args = parser.parse_args(argv)
+    try:
+        args = parser.parse_args(argv)
+    except SystemExit as exc:
+        # argparse exits 2 for a usage error, but this CLI documents 3 and the rails
+        # drop-in maps 3 -> 2 to match the tool it replaces. Letting argparse's own 2
+        # through made that mapping unreachable: a genuine usage error was
+        # indistinguishable from a failed verification in the rails exit space.
+        if exc.code == 2:
+            return 3
+        raise
     if args.cmd == "serve":
         return _serve(args)
     if args.cmd == "corroborate":

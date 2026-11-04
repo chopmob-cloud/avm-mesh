@@ -17,18 +17,69 @@ from .receipt import MeshError
 from .sealed import verify_sealed
 
 
+import gzip
 import json
 import os
 import pathlib
 import re
 import errno
+import zlib
 
 #: Anything reachable through `_file_resolver` must collapse to a single path component
 #: that is a normal file living directly under the evidence root. The same guard
 #: logic as `Store._safe_name`: no traversal, no symlinks, no absurd names.
 MAX_PROOF_BYTES_DEFAULT = 8 * 1024 * 1024
 
+#: gzip's two-byte magic, so a compressed proofpack is decoded from its bytes
+#: rather than guessed at from its name. Mirrors `anchor.GZIP_MAGIC`.
+GZIP_MAGIC = b"\x1f\x8b"
+
 _SAFE_NAME = re.compile(r"\A[A-Za-z0-9_.-]{1,128}\Z")
+
+
+def read_bounded_bytes(path: pathlib.Path, *, max_bytes: int) -> bytes:
+    """Read a file's bytes, refusing a symlink, a non-regular file, or an oversized one.
+
+    Extracted from `_file_resolver` so the read can be tested without a JSON layer in the
+    way. That separation matters: the 0x1A truncation bug below could not be reproduced
+    through the resolver, because the JSON parser rejected the fixture whether or not the
+    read truncated, so every assertion was measuring the parser instead of the reader.
+
+    The `O_BINARY` flag is not decoration. On Windows a descriptor opened without it is in
+    text mode, and `os.read` stops at the first 0x1A byte, which is EOF to the C runtime.
+    A gzip envelope contains 0x1A early -- the Voi fixture has one at offset 100 of
+    110,773 and this function returned exactly 100 bytes -- so a compressed proofpack was
+    silently half-read and then failed to decompress with a confusing message. Plain JSON
+    never contains 0x1A, so the shipped Algorand example hid the defect completely.
+    """
+    if path.is_symlink():
+        raise FileNotFoundError(path)
+    try:
+        fd = os.open(path, os.O_RDONLY | getattr(os, "O_BINARY", 0)
+                     | getattr(os, "O_NOFOLLOW", 0)
+                     | getattr(os, "O_CLOEXEC", 0))
+    except OSError as exc:
+        # Acceptable misses: ENOENT/ENOTDIR/ELOOP/EISDIR/ENAMETOOLONG mean "no readable
+        # regular file exists here", and callers catching FileNotFoundError expect that.
+        # Permission errors, EMFILE and other I/O failures keep their own type.
+        if getattr(exc, "errno", None) in (errno.ENOENT, errno.ENOTDIR, errno.ELOOP,
+                                          errno.EISDIR, errno.ENAMETOOLONG):
+            raise FileNotFoundError(path)
+        raise
+    try:
+        st = os.fstat(fd)
+        if (st.st_mode & 0o170000) != 0o100000:
+            raise FileNotFoundError(path)
+        if st.st_size > max_bytes:
+            raise ValueError(f"{path} is {st.st_size} bytes, over the {max_bytes} byte cap")
+        data = os.read(fd, max_bytes + 1)
+        if len(data) > max_bytes:
+            raise ValueError(
+                f"{path} is at least {len(data)} bytes, over the {max_bytes} byte cap")
+        return data
+    finally:
+        os.close(fd)
+
 
 def _file_resolver(root: pathlib.Path, *, max_bytes: int | None = None):
     root = pathlib.Path(root).absolute()
@@ -40,38 +91,24 @@ def _file_resolver(root: pathlib.Path, *, max_bytes: int | None = None):
         if not _SAFE_NAME.match(name) or name in (".", ".."):
             raise FileNotFoundError(uri)
         path = root / name
-        # `os.stat(..., follow_symlinks=False)` is not enough on its own: a Windows
-        # host has neither O_NOFOLLOW nor follow-symlinks-independent stat semantics
-        # that refuse symlinks by default. An explicit is_symlink() check closes the
-        # common case (non-atomic, but better than the original unconditional
-        # follow); `O_NOFOLLOW` still atomically catches the race on platforms that
-        # support it.
-        if path.is_symlink():
-            raise FileNotFoundError(path)
-        # Open with O_NOFOLLOW so a path that becomes a symlink during traversal is
-        # still refused atomically on platforms that support it.
-        try:
-            fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
-                          | getattr(os, "O_CLOEXEC", 0))
-        except (OSError,) as exc:
-            # Acceptable misses: ENOENT/ENOTDIR/ELOOP/EISDIR/ENAMETOOLONG mean
-            # "no readable regular file exists here", and callers catching
-            # FileNotFoundError expect exactly that. Permission errors, EMFILE, and other
-            # I/O failures keep their own type so a caller can retry or escalate.
-            if getattr(exc, "errno", None) in (errno.ENOENT, errno.ENOTDIR, errno.ELOOP, errno.EISDIR, errno.ENAMETOOLONG):
-                raise FileNotFoundError(path)
-            raise
-        try:
-            st = os.fstat(fd)
-            if (st.st_mode & 0o170000) != 0o100000:
-                raise FileNotFoundError(path)
-            if st.st_size > max_bytes:
-                raise ValueError(f"{path} is {st.st_size} bytes, over the {max_bytes} byte cap")
-            data = os.read(fd, max_bytes + 1)
+        data = read_bounded_bytes(path, max_bytes=max_bytes)
+
+        # A proofpack may be gzipped. The Voi example ships as `.json.gz`, and without
+        # this the CLI could not verify it at all: the reader hit a UTF-8 error on the
+        # gzip header. The magic bytes decide, not the filename, matching
+        # `anchor.load_bundle` -- a capture compressed and left with a `.json` name is a
+        # real accident, and the reverse is a name that lies about its contents.
+        if data[:2] == GZIP_MAGIC:
+            try:
+                data = gzip.decompress(data)
+            except (OSError, EOFError, zlib.error) as exc:
+                raise ValueError(f"{path} is not a readable gzip stream: {exc}")
             if len(data) > max_bytes:
-                raise ValueError(f"{path} is at least {len(data)} bytes, over the {max_bytes} byte cap")
-        finally:
-            os.close(fd)
+                raise ValueError(
+                    f"{path} expands past the {max_bytes} byte cap; refusing to parse it")
+        elif path.suffix == ".gz":
+            raise ValueError(f"{path} is named .gz but does not begin with gzip data")
+
         try:
             text = data.decode("utf-8-sig")
         except UnicodeDecodeError as exc:

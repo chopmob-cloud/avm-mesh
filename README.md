@@ -322,6 +322,30 @@ command above is taken from the bundle's own previous state-proof message. That 
 full verification path, but it is *not* an independent anchor, because whoever assembled the bundle chose
 it.
 
+### The same thing on Voi
+
+`examples/` also holds a genuine Voi mainnet capture and its receipt — a real asset transfer of 586896
+(`75LUFZZNQNOP…`, round 24213754), so the second chain can be checked rather than taken on trust:
+
+```sh
+avm-mesh verify examples/receipt-voi-24213754.json --evidence examples \
+  --genesis r20fSQI8gWe/kFZziNonSPCXLwcQmH/nxROvnnueWOk= \
+  --voters-commitment OxtxxwCffxvrKnC18BjavE8ytDQ7WXV2Lem7HVVN5ioZOa2shTlim0+xgB61KWOtnU3q1AWt1HvMzAeUaLojEw== \
+  --ln-proven-weight 2164197
+```
+
+```
+integrity:   PASS
+signature:   None
+consensus:   stake_attested
+trust root:  stake_attested
+attested:    75LUFZZNQNOPS3SLQRHZZKZIECEEVGGP4N3ZZ2UU2UKFFJU5WG4A @ round 24213754
+```
+
+The same caveat applies, and one more: the settlement amount is `0` units of asset `586896`, because that
+is what the captured transaction actually moved. An example that claimed a rounder number would only
+"verify" because the amount binding was not being checked.
+
 To get an independent anchor, derive one. `avm-mesh anchor` walks state proofs forward from a checkpoint you
 pin, verifying every interval along the way, and prints the flags `verify` needs:
 
@@ -517,7 +541,7 @@ independent. That is what the check above is for.
 
 ## Status
 
-**Version `0.11.1`** — `pip install avm-mesh`.
+**Version `0.12.0`** — `pip install avm-mesh`.
 
 The portable test gate runs **391 tests with 0 skipped** on both Python 3.12 and Python 3.10.22 (an isolated
 clean-room run: offline install from wheels only, plus the trust-boundary audit and the red-team suite), so

@@ -42,11 +42,12 @@ These are capability-maturity gaps, not security defects. Publishing with them o
 
 ## 5. Items to decide before flipping visibility
 
-- [ ] Run an independent second scan (recommended: `gitleaks git` on a fresh clone, or `trufflehog git`) and attach the report to this document. The `detect-secrets`/regex pass is thorough but heuristic.
+- [x] ~~Run an independent second scan~~ — **done**, see [`docs/PRE-PUBLICATION-AUDIT.md`](PRE-PUBLICATION-AUDIT.md). `gitleaks 8.21.2` over a fresh clone (92 non-merge commits, all refs) and over all 353 unique blobs: zero findings. `detect-secrets` over the same blobs: 114 high-entropy hits, every one classified as chain data or a test fixture.
 - [ ] Decide whether to publish at the current 0.10.2 version or wait for an external deliverable (a genuine rails receipt, say) so the first public source matches the first public capability claim.
 - [ ] Confirm commit author identity and history are acceptable as committed (`AlgoVoi <chopmob@gmail.com>`). Some early commits or handovers may contain personal notes.
 - [ ] Confirm PyPI project name `avm-mesh` stays free/owned (already published).
 - [ ] Final pass on `README.md` tone and "Honest limits" section for general-audience readers.
+- [ ] Repo cosmetics: add topics (`algorand`, `voi`, `state-proofs`, `falcon`, `settlement`, `x402`, `a2a`), set a homepage, and delete the nine stale branches listed in the audit (including `claude/vigilant-volta-3kjwyy`, which would delete 13,288 lines if merged).
 
 ## Verdict
 

@@ -517,7 +517,7 @@ independent. That is what the check above is for.
 
 ## Status
 
-**Version `0.11.0`** — `pip install avm-mesh`.
+**Version `0.11.1`** — `pip install avm-mesh`.
 
 The portable test gate runs **391 tests with 0 skipped** on both Python 3.12 and Python 3.10.22 (an isolated
 clean-room run: offline install from wheels only, plus the trust-boundary audit and the red-team suite), so

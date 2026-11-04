@@ -100,6 +100,21 @@ echo "=== 5. red team ==="
 verdict $? "red team refused every attack"
 tail -2 /tmp/redteam.log
 
+echo "=== 6. serve, end to end over HTTP ==="
+# This script was run by nothing -- not CI, not this gate -- and had rotted into an
+# uncaught traceback on --help and a server left running on failure. Running it here
+# against the installed wheel is the point: it exercises the artefact a stranger gets,
+# including the append-only guard and the traversal refusal, over a real socket.
+#
+# Port 0 would bind an ephemeral port, but the script needs to know the port to make
+# requests, so ask the kernel for a free one and hand it over. Without this a run on a
+# host already using 8099 fails for a reason that has nothing to do with the package.
+SERVE_PORT=$("$VENV"/bin/python -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()')
+"$VENV"/bin/python "$SRC/tools/exercise_serve.py" --port "$SERVE_PORT" >/tmp/serve.log 2>&1
+SERVE_RC=$?
+grep -E "PASS|FAIL" /tmp/serve.log || tail -5 /tmp/serve.log
+verdict $SERVE_RC "serve end-to-end probes (HTTP on port $SERVE_PORT)"
+
 echo
 if [ "$FAILED" -ne 0 ]; then
     echo "CLEAN-ROOM FAILED"

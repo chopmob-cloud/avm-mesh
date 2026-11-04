@@ -17,6 +17,7 @@ Exit 0 only if every check passes.
 """
 from __future__ import annotations
 
+import argparse
 import email.message
 import email.parser
 import pathlib
@@ -121,7 +122,12 @@ def check_sdist(path: pathlib.Path) -> str | None:
 
 
 def main(argv: list[str]) -> int:
-    target = pathlib.Path(argv[1] if len(argv) > 1 else "dist")
+    parser = argparse.ArgumentParser(
+        description="Check the built wheel and sdist for licence, metadata and test content.")
+    parser.add_argument("dist", nargs="?", default="dist",
+                        help="directory holding exactly one wheel and one sdist (default: dist)")
+    args = parser.parse_args(argv[1:])
+    target = pathlib.Path(args.dist)
     if not target.exists():
         print(f"no such directory: {target}", file=sys.stderr)
         return 3

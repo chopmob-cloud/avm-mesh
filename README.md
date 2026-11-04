@@ -216,6 +216,17 @@ A few more rules keep Level 3 honest:
 - **Only Algorand and Voi.** `ConsensusAttestation` rejects any other chain at construction, because only
   these two have Falcon state proofs. Hedera, Stellar, Base, Solana and Tempo stay honestly at Level 2.
 
+**Both chains are verified against real captures, not assumed from shared code.** `examples/` holds a live
+Algorand bundle (round 66457600) and a live Voi bundle (round 24213754, asset transfer of 586896), plus
+multi-interval walk captures for each chain. `tests/test_voi_chain.py` drives the Voi bundle through
+`create_receipt` and `verify_receipt`, requires `stake_attested` against a Voi anchor, requires an Algorand
+genesis pin to be refused, and requires the effect binding to read the real ASA transfer. Until 0.11.0 every
+Voi reference in the suite was a chain *label* rather than evidence.
+
+One asymmetry worth stating: the captured Voi transaction is an asset transfer, not a native payment. The
+public Voi algod returns `404` from its transaction-proof endpoint for `pay` transactions at the rounds
+tried, so `microvoi` payments are covered by unit tests only, not by a live capture.
+
 ## Verifying from the command line
 
 ```sh
@@ -506,7 +517,7 @@ independent. That is what the check above is for.
 
 ## Status
 
-**Version `0.10.2`** — `pip install avm-mesh`.
+**Version `0.11.0`** — `pip install avm-mesh`.
 
 The portable test gate runs **391 tests with 0 skipped** on both Python 3.12 and Python 3.10.22 (an isolated
 clean-room run: offline install from wheels only, plus the trust-boundary audit and the red-team suite), so

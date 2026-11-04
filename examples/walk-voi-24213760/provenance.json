@@ -1,0 +1,37 @@
+{
+  "chain": "voi-mainnet",
+  "genesis_hash_b64": "r20fSQI8gWe/kFZziNonSPCXLwcQmH/nxROvnnueWOk=",
+  "endpoint": "https://mainnet-api.voi.nodely.dev",
+  "interval": 256,
+  "target_round": 24213760,
+  "hops": [
+    24213248,
+    24213504,
+    24213760
+  ],
+  "fetched_at_utc": "2026-11-04T11:30:42Z",
+  "independence": "all captures came from one endpoint; this proves chaining, not source independence",
+  "files": [
+    {
+      "round": 24213248,
+      "file": "24213248.json.gz",
+      "sha256": "12b1b224b0de51ea421b80511065a7430c2060f8e2db051b93a63cb71a0ea402",
+      "state_proof_bytes": 114232,
+      "ln_proven_weight": 2164197
+    },
+    {
+      "round": 24213504,
+      "file": "24213504.json.gz",
+      "sha256": "a90b39ab1624bf5e8d801934e9e3fafb626e1965aefdb71100b0c465d3ec9387",
+      "state_proof_bytes": 121417,
+      "ln_proven_weight": 2164197
+    },
+    {
+      "round": 24213760,
+      "file": "24213760.json.gz",
+      "sha256": "cfd9557f791548f3e1770e69f9ac756f188990ce4d18e520c04d68450d438a50",
+      "state_proof_bytes": 109786,
+      "ln_proven_weight": 2164396
+    }
+  ]
+}

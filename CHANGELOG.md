@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.11.0 — Voi, proven rather than assumed
+
+Every previous Voi reference in this repository was a label. `chain="voimain-v1.0"` was passed to bond and
+corroboration helpers, and one test asserted that a Voi policy refuses an Algorand receipt. No test had ever
+verified a genuine Voi bundle, so "works on both AVM chains" rested on shared code and an argument about
+shared encoding. This release replaces that argument with evidence.
+
+### Added
+
+- **`examples/voi-proofpack-24213754.json.gz`** — a genuine Voi mainnet capture, transaction
+  `75LUFZZNQNOPS3SLQRHZZKZIECEEVGGP4N3ZZ2UU2UKFFJU5WG4A` in round 24213754, taken from
+  `https://mainnet-api.voi.nodely.dev`. The uncompressed bundle's SHA-256 is pinned in the test.
+- **`examples/walk-voi-24213760/`** — three consecutive Voi state proofs (24213248, 24213504, 24213760),
+  hashed in `provenance.json`, so the anchor walk is demonstrated chaining on Voi as well as Algorand.
+- **`tests/test_voi_chain.py`** — thirteen tests over that evidence: the bundle identifies itself as
+  `voimain-v1.0`; it reaches `stake_attested` against a Voi anchor; an Algorand genesis pin is refused;
+  without an anchor it stays `unattested`; the amount binding reads the real ASA transfer (asset 586896,
+  0 units) and refuses a wrong amount, a wrong asset id, and a native-unit claim on an asset transfer;
+  and a Voi receipt round-trips through `create_receipt` / `verify_receipt`.
+
+### What this changes
+
+The second chain is now covered by a real bundle end to end, including the tier that requires an anchor and
+the effect binding that reads chain-specific transaction encoding.
+
+### What it does not change
+
+- The captures came from **one public endpoint**. This proves the Voi path works, not that the endpoint is
+  independent or honest.
+- **No genuine Voi *payment* was captured.** The public Voi algod returns `404` from
+  `/v2/blocks/{round}/transactions/{txid}/proof` for `pay` transactions at the rounds tried, so the native
+  payment path (`microvoi`) remains verified by unit tests only, not by a live capture. The asset-transfer
+  path is verified live. That asymmetry is a property of the node's pruning, not of the code, and it is
+  recorded here rather than smoothed over.
+- On-chain bonding, a genuine rails receipt, and external crypto review remain open, as documented in
+  `docs/PUBLISH-READINESS.md`.
+
 ## 0.10.2 — hardening: bounded rate-limiter table (§6.2 of the external validation)
 
 ### Fixed

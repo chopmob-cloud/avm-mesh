@@ -116,3 +116,39 @@ jobs:
         run: |
           cd /tmp/a2a-tck
           python run_tck.py --sut-host http://localhost:9999 --level must --transport jsonrpc
+
+  branch-hygiene:
+    # A direct commit to main is invisible: the suite is green whether the change
+    # arrived through review or around it. This job makes the difference visible on
+    # a push (a pushed commit is not a merge commit) and does nothing on a PR, where
+    # the question does not arise.
+    #
+    # It cannot block the push -- GitHub branch protection would, and that is
+    # unavailable on a private repository without a paid plan (the API answers
+    # "Upgrade to GitHub Pro"). So this reports rather than prevents, and the local
+    # guard in tools/hooks/pre-push is what prevents.
+    name: main came through a pull request
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: check the head commit is a merge
+        run: |
+          parents=$(git rev-list --parents -n 1 HEAD | wc -w)
+          subject=$(git log -1 --format=%s)
+          if [ "$parents" -lt 3 ]; then
+            echo "::error::main moved by a direct push, not a merged pull request."
+            echo "head subject: $subject"
+            echo ""
+            echo "A commit that arrives on main without review looks identical in the"
+            echo "log to one that arrived through it, and CI is green either way."
+            echo "Open a branch and a pull request next time: see CONTRIBUTING.md."
+            echo ""
+            echo "If this was a deliberate emergency, re-run the job with the"
+            echo "AVM_ALLOW_MAIN_PUSH=1 repository variable set, and say why in the"
+            echo "commit message."
+            exit 1
+          fi
+          echo "head commit is a merge of ${parents} parents: arrived through a PR"

@@ -13,3 +13,8 @@ NOTICE text eol=lf
 # against the hash pinned at fetch time, and a line-ending rule would silently
 # break that on checkout.
 *.gz -text
+# Hooks are run by git itself, which on a POSIX host execs the file directly:
+# a CRLF shebang fails with `set: Illegal option -`, the same defect that
+# broke the clean-room script. The executable bit is set in the index by
+# `git update-index --chmod=+x`, not by this file.
+tools/hooks/* text eol=lf

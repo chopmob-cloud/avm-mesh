@@ -1,0 +1,81 @@
+#!/bin/sh
+# Refuse to introduce commits to `main` by a local push.
+#
+# Why: on 0.11.0 and 0.10.2 a release was committed straight to main and pushed,
+# skipping the branch-and-PR step entirely. CI still ran and passed, which is
+# exactly why it went unnoticed: a green run on main looks identical whether the
+# change arrived through review or around it.
+#
+# This hook lives in the repository (tools/hooks) and is activated by
+# `git config core.hooksPath tools/hooks`, so it survives a clone and applies to
+# every branch of work rather than to one machine's .git/hooks.
+#
+# It cannot block `gh pr merge`, which merges server-side and never runs a local
+# hook. That is the intended path, so the gap is the design.
+#
+# Override for a genuine emergency, on the record:
+#     AVM_ALLOW_MAIN_PUSH=1 git push origin main
+#
+# Exit codes: 0 allow, 1 refuse.
+
+set -u
+
+PROTECTED="main"
+REMOTE="${1:-origin}"
+
+status=0
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+    case "$remote_ref" in
+        "refs/heads/$PROTECTED") ;;
+        *) continue ;;
+    esac
+
+    # A delete of the protected branch is never wanted.
+    if [ "$local_sha" = "0000000000000000000000000000000000000000" ]; then
+        echo "pre-push: refusing to delete '$PROTECTED' on '$REMOTE'." >&2
+        status=1
+        continue
+    fi
+
+    if [ "${AVM_ALLOW_MAIN_PUSH:-0}" = "1" ]; then
+        echo "pre-push: AVM_ALLOW_MAIN_PUSH=1 — allowing a direct push to '$PROTECTED'." >&2
+        echo "pre-push: say why in the commit message; this is on the record." >&2
+        continue
+    fi
+
+    # Nothing new is being introduced (branch already up to date): allow, since
+    # refusing this would break an ordinary `git push` after a fetch.
+    if [ "$remote_sha" != "0000000000000000000000000000000000000000" ]; then
+        if git merge-base --is-ancestor "$local_sha" "$remote_sha" 2>/dev/null; then
+            continue
+        fi
+    fi
+
+    count=$(git rev-list --count "$remote_sha..$local_sha" 2>/dev/null || echo "?")
+    subject=$(git log -1 --format=%s "$local_sha" 2>/dev/null || echo "(unknown)")
+
+    cat >&2 <<EOF
+
+pre-push: refusing to push $count commit(s) directly to '$PROTECTED'.
+pre-push: tip is "$subject"
+
+  Open a branch and a pull request instead:
+
+      git switch -c <branch> "$local_sha"
+      git push -u origin <branch>
+      gh pr create --base $PROTECTED --head <branch>
+
+  A release that arrives on main without review looks identical to one that
+  arrived through it: CI is green either way, which is how two of them slipped
+  through before this hook existed.
+
+  If this really is an emergency, re-run with the override and say why:
+
+      AVM_ALLOW_MAIN_PUSH=1 git push $REMOTE $PROTECTED
+
+EOF
+    status=1
+done
+
+exit "$status"

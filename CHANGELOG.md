@@ -1,5 +1,57 @@
 # Changelog
 
+## 0.13.1 — every external reader bounded, and the shed response actually arrives
+
+A sweep of all 19 I/O call sites rather than the ones I remembered. Three defects.
+
+### Fixed
+
+- **The receipt the CLI reads was unbounded.** `_file_resolver` was capped in 0.10.1 and the
+  receipt read beside it was missed, so the CLI carefully bounded the evidence a receipt
+  pointed at while swallowing the receipt itself — the file that arrives from a counterparty
+  and is the first thing it touches — whole. Now bounded at 1 MiB, because a receipt is
+  metadata naming a bundle and a digest and should never rival the proofpack it points at.
+- **A size refusal and a syntax error printed the same message.** Both said "receipt is not
+  valid JSON", which sends an operator hunting for a syntax error in a file that was refused
+  without being parsed. They are now distinguished.
+- **`Store.get_receipt` had no size bound**, and `put_receipt` is not the only way a file
+  reaches that directory.
+- **The saturation 503 was written and never arrived on Windows.**
+  `test_saturation_sheds_load_with_503_rather_than_growing` failed with
+  `ConnectionAbortedError`, and the assertion had been written against Linux behaviour: on
+  Windows the server sends the shed response then closes while the client is still
+  mid-request, so the RST wins and the 503 is lost. The server now half-closes and drains
+  first, which made all three probes return 503 instead of one aborting. Removing the drain
+  puts the abort back, so the improvement is pinned rather than the assertion loosened.
+
+### Changed
+
+- The saturation test now states the three honest shedding outcomes instead of one, and
+  separately asserts the thing that would actually be a defect: a saturated server must never
+  SERVE a request (200). A test that only accepted one platform's symptom was going to keep
+  misreporting this.
+
+### Removed
+
+- `README.open-offer.draft.md`, which was tracked, superseded by `README.md`, and pointed at
+  a `docs/REFERENCE.md` that does not exist. Two broken links in `CODE_OF_CONDUCT.md` and
+  `CONTRIBUTING.md` fixed at the same time; zero broken internal links remain.
+
+### Documentation
+
+- The README's `avm-mesh anchor` example carried `<the checkpoint interval's commitment>`
+  placeholders, so the one command demonstrating the strongest property in the repository
+  could not be run by a reader. It now carries the shipped corroborated walk's real values
+  and its real output, reproduced before being written down.
+
+### Sweep coverage
+
+Every reader of an external file is bounded or opens binary. Zero bare excepts, zero
+`except Exception: pass`, zero TODOs, zero asserts in library code, zero `shell=True`, zero
+`verify=False`. All 17 modules and the rails package import cleanly. All 10 tools parse and
+answer `--help`; the six that do real work were executed rather than read. VM2 clean room 531
+tests / 0 skipped on 3.12 and 531 passed on 3.10; validation gate CLEAN with no findings.
+
 ## 0.13.0 — cross-operator corroboration: an anchor no longer rests on one endpoint's word
 
 Every attestation this project has issued rested on a single endpoint. A walk could verify

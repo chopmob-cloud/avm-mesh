@@ -66,4 +66,4 @@ that sit just outside it as missing, and a finding that cannot be reproduced is 
 
 ## Reporting a security issue
 
-Do not open an issue. See [`SECURITY.md`](../SECURITY.md).
+Do not open an issue. See [`SECURITY.md`](SECURITY.md).

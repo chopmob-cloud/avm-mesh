@@ -26,7 +26,7 @@ a legitimate and welcome contribution; "you clearly do not know what you are doi
 
 ## Reporting a problem
 
-Email the maintainer at the address in [`SECURITY.md`](../SECURITY.md) if the report is
+Email the maintainer at the address in [`SECURITY.md`](SECURITY.md) if the report is
 sensitive, or open an issue if it is not. Reports are read and acted on; you will get an
 acknowledgement.
 

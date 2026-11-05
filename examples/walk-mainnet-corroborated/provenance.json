@@ -1,0 +1,264 @@
+{
+  "tool": "tools/fetch_corroborated_walk.py",
+  "chain": "algorand-mainnet",
+  "interval": 256,
+  "captured_at_utc": "2026-11-05T00:12:15+00:00",
+  "node_heads": {
+    "algonode": 66648510,
+    "nodely": 66648510
+  },
+  "operators": [
+    {
+      "name": "algonode",
+      "endpoint": "https://mainnet-api.algonode.cloud"
+    },
+    {
+      "name": "nodely",
+      "endpoint": "https://mainnet-api.4160.nodely.dev"
+    }
+  ],
+  "requested_rounds": [
+    66647296,
+    66647552,
+    66647808,
+    66648064
+  ],
+  "captured_rounds": [
+    66647552,
+    66647808,
+    66648064
+  ],
+  "beyond_retention": [
+    66647296
+  ],
+  "captures": [
+    {
+      "round": 66647552,
+      "file": "66647552.json.gz",
+      "sha256_gz": "2c1102920da5bc1b790669c3ab82d4c46cc489828c13c47e5e6c9e90b50672fc",
+      "sha256_raw": "f278c05f7eb2a88223467bf4062b3dd4628d63d1690708afbb7dceffb83b1dbc",
+      "state_proof_bytes": 302021,
+      "ln_proven_weight": 2230294,
+      "source": "algonode",
+      "corroborated_by": [
+        "algonode",
+        "nodely"
+      ],
+      "last_attested_round": 66647552
+    },
+    {
+      "round": 66647808,
+      "file": "66647808.json.gz",
+      "sha256_gz": "9d0fc7a9688c123d08fa691aa8369da06cf1852160d5109c61392a5a16bd5423",
+      "sha256_raw": "60c684d631e5d8a35de65385755765999c2b9b3da0bc13411a180839972a36e3",
+      "state_proof_bytes": 323864,
+      "ln_proven_weight": 2230295,
+      "source": "algonode",
+      "corroborated_by": [
+        "algonode",
+        "nodely"
+      ],
+      "last_attested_round": 66647808
+    },
+    {
+      "round": 66648064,
+      "file": "66648064.json.gz",
+      "sha256_gz": "f3c23bb257a4c04ab2329a346f6094db0938ceac598876e705c35d0d9314c815",
+      "sha256_raw": "6034859f5c46dc7ecbaf415186eb8cf3a2fbb19accc6f00bc9ddb52b4af45fce",
+      "state_proof_bytes": 297353,
+      "ln_proven_weight": 2230295,
+      "source": "algonode",
+      "corroborated_by": [
+        "algonode",
+        "nodely"
+      ],
+      "last_attested_round": 66648064
+    }
+  ],
+  "corroboration": [
+    {
+      "round": 66647552,
+      "corroborated": true,
+      "operators_answering": [
+        "algonode",
+        "nodely"
+      ],
+      "agreement": {
+        "VotersCommitment": {
+          "agreed": true,
+          "values": {
+            "algonode": "QNZAlaF/kfI2kmMnD5pXmJt5ugKYCjHT31G/XkQ7Hqa1LOxVMQF0TdbO0bXl8xt+Ks9MgXpcGns4GKWEA1blYA==",
+            "nodely": "QNZAlaF/kfI2kmMnD5pXmJt5ugKYCjHT31G/XkQ7Hqa1LOxVMQF0TdbO0bXl8xt+Ks9MgXpcGns4GKWEA1blYA=="
+          }
+        },
+        "LnProvenWeight": {
+          "agreed": true,
+          "values": {
+            "algonode": 2230294,
+            "nodely": 2230294
+          }
+        },
+        "BlockHeadersCommitment": {
+          "agreed": true,
+          "values": {
+            "algonode": "Zq3bhtCQ3tF686KTDUIRnrUGXAqGFhg2vqYtWdzdt+o=",
+            "nodely": "Zq3bhtCQ3tF686KTDUIRnrUGXAqGFhg2vqYtWdzdt+o="
+          }
+        },
+        "state_proof_sha256": {
+          "agreed": true,
+          "values": {
+            "algonode": "80c74a7615ce1f1e049cb961e71260cb1293c93e28079eb70d414f4ba82cba0d",
+            "nodely": "80c74a7615ce1f1e049cb961e71260cb1293c93e28079eb70d414f4ba82cba0d"
+          }
+        }
+      },
+      "responses": {
+        "algonode": {
+          "ok": true,
+          "last_attested_round": 66647552,
+          "fields": {
+            "VotersCommitment": "QNZAlaF/kfI2kmMnD5pXmJt5ugKYCjHT31G/XkQ7Hqa1LOxVMQF0TdbO0bXl8xt+Ks9MgXpcGns4GKWEA1blYA==",
+            "LnProvenWeight": 2230294,
+            "BlockHeadersCommitment": "Zq3bhtCQ3tF686KTDUIRnrUGXAqGFhg2vqYtWdzdt+o="
+          },
+          "state_proof_sha256": "80c74a7615ce1f1e049cb961e71260cb1293c93e28079eb70d414f4ba82cba0d"
+        },
+        "nodely": {
+          "ok": true,
+          "last_attested_round": 66647552,
+          "fields": {
+            "VotersCommitment": "QNZAlaF/kfI2kmMnD5pXmJt5ugKYCjHT31G/XkQ7Hqa1LOxVMQF0TdbO0bXl8xt+Ks9MgXpcGns4GKWEA1blYA==",
+            "LnProvenWeight": 2230294,
+            "BlockHeadersCommitment": "Zq3bhtCQ3tF686KTDUIRnrUGXAqGFhg2vqYtWdzdt+o="
+          },
+          "state_proof_sha256": "80c74a7615ce1f1e049cb961e71260cb1293c93e28079eb70d414f4ba82cba0d"
+        }
+      }
+    },
+    {
+      "round": 66647808,
+      "corroborated": true,
+      "operators_answering": [
+        "algonode",
+        "nodely"
+      ],
+      "agreement": {
+        "VotersCommitment": {
+          "agreed": true,
+          "values": {
+            "algonode": "00xqo/JW/ldbMWflfITg9UmhaD0/iib4xwXD8dsYYaROni9RWNcvaarkFYdhR7Q45xTTE/CDeRYpMM1M3j9cOg==",
+            "nodely": "00xqo/JW/ldbMWflfITg9UmhaD0/iib4xwXD8dsYYaROni9RWNcvaarkFYdhR7Q45xTTE/CDeRYpMM1M3j9cOg=="
+          }
+        },
+        "LnProvenWeight": {
+          "agreed": true,
+          "values": {
+            "algonode": 2230295,
+            "nodely": 2230295
+          }
+        },
+        "BlockHeadersCommitment": {
+          "agreed": true,
+          "values": {
+            "algonode": "saMg/HdZPJA/i1Z83FeBRYrGj05HuZOyR94aUHyp9L0=",
+            "nodely": "saMg/HdZPJA/i1Z83FeBRYrGj05HuZOyR94aUHyp9L0="
+          }
+        },
+        "state_proof_sha256": {
+          "agreed": true,
+          "values": {
+            "algonode": "86905b0efa86ffedf7f5824e8b55d0d573dc24c9934f42d84166412fc5108b25",
+            "nodely": "86905b0efa86ffedf7f5824e8b55d0d573dc24c9934f42d84166412fc5108b25"
+          }
+        }
+      },
+      "responses": {
+        "algonode": {
+          "ok": true,
+          "last_attested_round": 66647808,
+          "fields": {
+            "VotersCommitment": "00xqo/JW/ldbMWflfITg9UmhaD0/iib4xwXD8dsYYaROni9RWNcvaarkFYdhR7Q45xTTE/CDeRYpMM1M3j9cOg==",
+            "LnProvenWeight": 2230295,
+            "BlockHeadersCommitment": "saMg/HdZPJA/i1Z83FeBRYrGj05HuZOyR94aUHyp9L0="
+          },
+          "state_proof_sha256": "86905b0efa86ffedf7f5824e8b55d0d573dc24c9934f42d84166412fc5108b25"
+        },
+        "nodely": {
+          "ok": true,
+          "last_attested_round": 66647808,
+          "fields": {
+            "VotersCommitment": "00xqo/JW/ldbMWflfITg9UmhaD0/iib4xwXD8dsYYaROni9RWNcvaarkFYdhR7Q45xTTE/CDeRYpMM1M3j9cOg==",
+            "LnProvenWeight": 2230295,
+            "BlockHeadersCommitment": "saMg/HdZPJA/i1Z83FeBRYrGj05HuZOyR94aUHyp9L0="
+          },
+          "state_proof_sha256": "86905b0efa86ffedf7f5824e8b55d0d573dc24c9934f42d84166412fc5108b25"
+        }
+      }
+    },
+    {
+      "round": 66648064,
+      "corroborated": true,
+      "operators_answering": [
+        "algonode",
+        "nodely"
+      ],
+      "agreement": {
+        "VotersCommitment": {
+          "agreed": true,
+          "values": {
+            "algonode": "VTJ49QrO1oDUwB5tXpqCoSj2KgOUVmKxy7MMH1FWZagqTmQOo2FdYy+uQf0dw5d/6kNcXzc6pSpS3N8jaQbtxw==",
+            "nodely": "VTJ49QrO1oDUwB5tXpqCoSj2KgOUVmKxy7MMH1FWZagqTmQOo2FdYy+uQf0dw5d/6kNcXzc6pSpS3N8jaQbtxw=="
+          }
+        },
+        "LnProvenWeight": {
+          "agreed": true,
+          "values": {
+            "algonode": 2230295,
+            "nodely": 2230295
+          }
+        },
+        "BlockHeadersCommitment": {
+          "agreed": true,
+          "values": {
+            "algonode": "LLZRu0QsHAbp8zar4DnMH7sGRjqxxJWYj5XOy1GJLRE=",
+            "nodely": "LLZRu0QsHAbp8zar4DnMH7sGRjqxxJWYj5XOy1GJLRE="
+          }
+        },
+        "state_proof_sha256": {
+          "agreed": true,
+          "values": {
+            "algonode": "96982cc2e3ccfa3db11975aedccd97bf95212e280e70919cadea90b8971bf6d0",
+            "nodely": "96982cc2e3ccfa3db11975aedccd97bf95212e280e70919cadea90b8971bf6d0"
+          }
+        }
+      },
+      "responses": {
+        "algonode": {
+          "ok": true,
+          "last_attested_round": 66648064,
+          "fields": {
+            "VotersCommitment": "VTJ49QrO1oDUwB5tXpqCoSj2KgOUVmKxy7MMH1FWZagqTmQOo2FdYy+uQf0dw5d/6kNcXzc6pSpS3N8jaQbtxw==",
+            "LnProvenWeight": 2230295,
+            "BlockHeadersCommitment": "LLZRu0QsHAbp8zar4DnMH7sGRjqxxJWYj5XOy1GJLRE="
+          },
+          "state_proof_sha256": "96982cc2e3ccfa3db11975aedccd97bf95212e280e70919cadea90b8971bf6d0"
+        },
+        "nodely": {
+          "ok": true,
+          "last_attested_round": 66648064,
+          "fields": {
+            "VotersCommitment": "VTJ49QrO1oDUwB5tXpqCoSj2KgOUVmKxy7MMH1FWZagqTmQOo2FdYy+uQf0dw5d/6kNcXzc6pSpS3N8jaQbtxw==",
+            "LnProvenWeight": 2230295,
+            "BlockHeadersCommitment": "LLZRu0QsHAbp8zar4DnMH7sGRjqxxJWYj5XOy1GJLRE="
+          },
+          "state_proof_sha256": "96982cc2e3ccfa3db11975aedccd97bf95212e280e70919cadea90b8971bf6d0"
+        }
+      }
+    }
+  ],
+  "cross_operator_agreement": true,
+  "independence": "agreement across distinct endpoints, not proof of independent ownership; a shared upstream, hosting provider or operator running two domains defeats this, and a reader who knows the operators should say so",
+  "retention_note": "corroboration is only possible during capture: public endpoints retain three to four state-proof intervals, so an interval cannot be cross-checked after the fact by anyone",
+  "regenerate": "python tools/fetch_corroborated_walk.py --hops 4 --out examples/walk-mainnet-corroborated"
+}

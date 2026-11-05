@@ -316,6 +316,43 @@ trust root:  stake_attested
 attested:    J6FPFF4CKP4XUWUEDLEENV7EV5YDKFZHZJC6UYYWBDVBJLAT7IIA @ round 66457600
 ```
 
+### Checking that the capture came from more than one operator
+
+Every attestation used to rest on one endpoint's word, which the README said plainly and left at that.
+`crossnode` closes it: fetch the same interval from operators believed to be distinct and require their
+independent answers to agree on the signing set, the proven weight, the block-headers commitment and the
+proof itself.
+
+```sh
+# pick a round within the last few intervals; they are pruned after that
+avm-mesh crossnode --round 66647808
+```
+
+```
+round 66647808
+  operators answering: 2 of 2 (2 required)
+  AGREE  voters_commitment: 00xqo/JW/ldbMWflfITg9UmhaD0/iib4xwXD8dsYYaROni9RWNcvaarkFYdhR7Q45xTTE/CDeRYpMM1M3j9cOg==
+  AGREE  ln_proven_weight: 2230295
+  AGREE  block_headers_commitment: saMg/HdZPJA/i1Z83FeBRYrGj05HuZOyR94aUHyp9L0=
+  AGREE  state_proof_sha256: 86905b0efa86ffedf7f5824e8b55d0d573dc24c9934f42d84166412fc5108b25
+  verdict: corroborated by distinct endpoints
+```
+
+Disagreement is a refusal, not a vote — two operators agreeing on a fiction and one telling the truth must
+fail, or a coordinated pair carries it. One operator down is also a refusal, not quiet agreement with itself.
+
+**This only works at capture time.** The round in the example above has an expiry date: public endpoints
+retain three or four state-proof intervals and prune everything older, so a specific round stops working
+within about ten minutes of being written here. Substitute a current one — `--round` must be a multiple of
+256 — or use the shipped captures, which were corroborated when they were taken. Either way, an old interval
+cannot be cross-checked afterwards by anyone. So the capture tool corroborates as it
+fetches, and `examples/walk-mainnet-corroborated/` holds three consecutive intervals captured that way. The
+walk then derives its anchor from the proofs alone, and that derived value equals what both operators
+reported for the same interval — two independent derivations landing on the same number.
+
+Honest limit: distinct endpoints are not proven separate businesses. `provenance.json` says so in the same
+words. See [`docs/INDEPENDENT-OPERATORS.md`](docs/INDEPENDENT-OPERATORS.md).
+
 **What this proves, exactly.** The Falcon signatures, reveal membership, signed weight and coin selection
 over that bundle are all verified, and you can re-verify them yourself. One caveat: the anchor in the
 command above is taken from the bundle's own previous state-proof message. That is enough to exercise the
@@ -541,7 +578,7 @@ independent. That is what the check above is for.
 
 ## Status
 
-**Version `0.12.0`** — `pip install avm-mesh`.
+**Version `0.13.0`** — `pip install avm-mesh`.
 
 The portable test gate runs **391 tests with 0 skipped** on both Python 3.12 and Python 3.10.22 (an isolated
 clean-room run: offline install from wheels only, plus the trust-boundary audit and the red-team suite), so

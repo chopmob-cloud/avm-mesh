@@ -58,3 +58,18 @@ Code and packaging: **ready**, and tested in a way I consider honest (fail-close
 Capability maturity: **partially ready** — the receipt/verify/seal/anchor/rails-adapter surfaces are solid; the bonding and independence claims are explicitly documented as unproven in-app rather than claimed. That distinction is what makes a public release defensible.
 
 What I will not do on my own: change repository visibility. That is a reversible-in-review-only decision that belongs to you, with the final scan in hand. Tell me to flip it, or to run the independent scan first, and I will be precise about which one I am doing.
+
+## The one claim no one else in this space can make
+
+`0.13.0` ships cross-operator corroboration: a settlement anchor is no longer one endpoint's
+word. Two publicly distinct operators are asked for the same attested interval and must
+agree on the signing set, the proven weight, the block-headers commitment and the proof
+itself. Disagreement is a refusal, not a vote — a coordinated pair cannot outvote the truth.
+
+This is the strongest thing in the repository and it belongs in the first paragraph of the
+public README, not buried in a docs file. See `docs/INDEPENDENT-OPERATORS.md`.
+
+Honest scope, which the docs state: distinct endpoints are not proven separate businesses,
+and two agreeing operators does not prove either is honest. What it does prove is that one
+alone cannot substitute a different signing set without the other contradicting it.
+

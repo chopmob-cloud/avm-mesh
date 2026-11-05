@@ -30,6 +30,11 @@ import zlib
 #: logic as `Store._safe_name`: no traversal, no symlinks, no absurd names.
 MAX_PROOF_BYTES_DEFAULT = 8 * 1024 * 1024
 
+#: A sealed receipt is metadata, not evidence: it names a bundle and a digest and carries
+#: no state proof. 1 MiB is generous for that shape and still bounds the one file the CLI
+#: reads from a counterparty without knowing anything about it.
+MAX_RECEIPT_BYTES = 1 * 1024 * 1024
+
 #: gzip's two-byte magic, so a compressed proofpack is decoded from its bytes
 #: rather than guessed at from its name. Mirrors `anchor.GZIP_MAGIC`.
 GZIP_MAGIC = b"\x1f\x8b"
@@ -476,7 +481,12 @@ def main(argv: list[str] | None = None, *, signature_style: str = "raw") -> int:
         return 3
 
     try:
-        sealed = json.loads(pathlib.Path(args.receipt).read_text(encoding="utf-8"))
+        # A receipt arrives from a counterparty, so it gets the same bound as the
+        # evidence: `_file_resolver` was capped in 0.10.1 and this read was missed, which
+        # made the receipt the one unbounded file the CLI would happily swallow whole.
+        sealed = json.loads(
+            read_bounded_bytes(pathlib.Path(args.receipt),
+                               max_bytes=MAX_RECEIPT_BYTES).decode("utf-8-sig"))
         anchor = None
         if (args.voters_commitment is None) != (args.ln_proven_weight is None):
             print("--voters-commitment and --ln-proven-weight are required together",
@@ -528,9 +538,15 @@ def main(argv: list[str] | None = None, *, signature_style: str = "raw") -> int:
         print(f"cannot read receipt: {exc}", file=sys.stderr)
         return 3
     except ValueError as exc:
-        # json.JSONDecodeError is a ValueError; a malformed file is the caller's
-        # problem, so it is a clean usage failure rather than a crash.
-        print(f"receipt is not valid JSON: {exc}", file=sys.stderr)
+        # Two different things raise ValueError here and they are not the same problem: a
+        # size refusal from `read_bounded_bytes` and a malformed document from the JSON
+        # parser. Calling both "not valid JSON" told an operator to go looking for a syntax
+        # error in a file the CLI had refused to read at all.
+        detail = str(exc)
+        if "cap" in detail:
+            print(f"receipt refused on size: {detail}", file=sys.stderr)
+        else:
+            print(f"receipt is not valid JSON: {exc}", file=sys.stderr)
         return 3
 
     if args.json:

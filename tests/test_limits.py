@@ -136,8 +136,26 @@ def test_saturation_sheds_load_with_503_rather_than_growing(tmp_path):
                 codes.append(exc.code)
             except Exception as exc:            # a reset connection is also load-shedding
                 codes.append(type(exc).__name__)
-        assert any(code in (503, "ConnectionResetError", "ConnectionRefusedError",
-                            "URLError", "timeout") for code in codes), codes
+
+        # Three outcomes are all honest shedding and all are accepted:
+        #   503                 the server wrote the shed response and it arrived
+        #   ConnectionAborted   the server closed while the client was still writing,
+        #                       so the RST arrived first. On Windows this is the normal
+        #                       outcome even after the 503 is sent -- the client is
+        #                       mid-request when the slot is refused, and there is no
+        #                       window in which the response can be delivered.
+        #   reset / refused     the connection never completed at all
+        #
+        # What is NOT acceptable is a request that is ACCEPTED and served (200), because
+        # then the ceiling did nothing, or a call that hangs, because then it queued.
+        # The test failed on Windows for months of runs' worth of time by treating one
+        # of the acceptable aborts as a failure, which is a test bug rather than a server
+        # one: the assertion was written against the Linux behaviour.
+        shed = (503, "ConnectionResetError", "ConnectionRefusedError",
+                "ConnectionAbortedError", "ConnectionAborted", "URLError", "timeout")
+        assert not any(code == 200 for code in codes), \
+            f"a saturated server SERVED a request instead of shedding: {codes}"
+        assert any(code in shed for code in codes), codes
     finally:
         held.close()
         server.shutdown()

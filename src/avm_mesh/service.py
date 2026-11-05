@@ -25,6 +25,7 @@ import os
 import pathlib
 import re
 import tempfile
+import socket
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -217,6 +218,12 @@ class Store:
         _within_store(self.receipts, path)
         if not path.is_file():
             raise FileNotFoundError(txid)
+        # Same bound as a proofpack, for the same reason: the file is served to callers and
+        # `put_receipt` is not the only way one can appear in this directory. A receipt is
+        # metadata, so this limit is generous rather than tight.
+        if path.stat().st_size > self.max_proofpack_bytes:
+            raise MeshError(
+                f"stored receipt {txid} is over the {self.max_proofpack_bytes} byte limit")
         raw = path.read_text(encoding="utf-8")
         sidecar = self.receipts / f"{txid}.sha256"
         if sidecar.is_file():
@@ -403,6 +410,17 @@ class _BoundedThreadingHTTPServer(ThreadingHTTPServer):
             try:
                 request.sendall(b"HTTP/1.0 503 Service Unavailable\r\n"
                                 b"Content-Length: 0\r\nConnection: close\r\n\r\n")
+                # Half-close, then drain whatever the client is still sending. Without
+                # this, closing while the client is mid-write sends an RST, and on
+                # Windows the client sees ConnectionAbortedError instead of the 503 --
+                # so the shed response is written and never arrives. Linux happened to
+                # deliver it, which is why this only showed on one platform.
+                request.shutdown(socket.SHUT_WR)
+                request.settimeout(0.05)
+                deadline = time.monotonic() + 0.5
+                while time.monotonic() < deadline:
+                    if not request.recv(65536):
+                        break
             except OSError:
                 pass
             finally:

@@ -388,15 +388,18 @@ pin, verifying every interval along the way, and prints the flags `verify` needs
 
 ```sh
 avm-mesh anchor --genesis wGHE2Pwdvd7S12BL5FaOP20EGYesN73ktiC1qzkkit8= \
-  --anchor-round 66457344 \
-  --anchor-voters-commitment <the checkpoint interval's commitment> \
-  --anchor-ln-proven-weight <its proven weight> \
-  --target-round 66457600 --bundles ./captures
+  --anchor-round 66647552 \
+  --anchor-voters-commitment QNZAlaF/kfI2kmMnD5pXmJt5ugKYCjHT31G/XkQ7Hqa1LOxVMQF0TdbO0bXl8xt+Ks9MgXpcGns4GKWEA1blYA== \
+  --anchor-ln-proven-weight 2230294 \
+  --target-round 66648064 --bundles examples/walk-mainnet-corroborated
 ```
 
 ```
-authenticated 1 interval(s) from the checkpoint
-target round:        66457600
+authenticated 2 interval(s) from the checkpoint
+target round:        66648064
+--voters-commitment  00xqo/JW/ldbMWflfITg9UmhaD0/iib4xwXD8dsYYaROni9RWNcvaarkFYdhR7Q45xTTE/CDeRYpMM1M3j9cOg==
+--ln-proven-weight   2230295
+trust basis:         pinned checkpoint; every interval verified forward from it
 --voters-commitment  71Oh0YaxEA59JIgWUjMmnpz0KG8lWJ2jwXQiTYxp15FulxCMNfHfBMHT/8hyTNv2tMdWZl+YOz8go5DczFfuLw==
 --ln-proven-weight   2230418
 trust basis:         pinned checkpoint; every interval verified forward from it

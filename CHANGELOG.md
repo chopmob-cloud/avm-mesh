@@ -1,5 +1,66 @@
 # Changelog
 
+## 0.13.0 — cross-operator corroboration: an anchor no longer rests on one endpoint's word
+
+Every attestation this project has issued rested on a single endpoint. A walk could verify
+every interval from a pinned checkpoint to a target and still be worthless if that one
+operator served a consistent fiction, because nothing about a state proof says who gave it
+to you. The README said so in a caveat. This release answers it.
+
+### Added
+
+- **`avm-mesh crossnode`** — asks several operators believed to be organisationally
+  distinct for the same attested interval and requires their independent answers to agree
+  on `VotersCommitment`, `LnProvenWeight`, `BlockHeadersCommitment` and the SHA-256 of the
+  proof itself. Exit 0 corroborated, 2 refused, 3 malformed.
+- **`tools/fetch_corroborated_walk.py`** — captures a walk and corroborates each interval
+  while doing so, writing every capture's corroboration result into `provenance.json`.
+- **`examples/walk-mainnet-corroborated/`** — three consecutive mainnet intervals
+  (`66647552`, `66647808`, `66648064`) captured with two public operators agreeing.
+- **`docs/INDEPENDENT-OPERATORS.md`** — what the mechanism establishes and what it does not.
+- `tests/test_crossnode.py` (15 tests) and `tests/test_corroborated_walk.py` (9 tests).
+
+### The decision that matters: disagreement is a refusal, not a vote
+
+A majority rule would let two operators agreeing on a fiction outvote one telling the truth,
+which is precisely the adversary this is meant to resist. Unanimity on the compared fields
+is required, and `tests/test_crossnode.py` pins it by giving the liar a majority. A single
+operator answering is likewise a refusal rather than quiet agreement with itself — the
+failure mode that would make the whole mechanism theatre — and `--min-operators 1` is
+refused outright.
+
+### Found by running it: corroboration is only possible at capture time
+
+Public Algorand endpoints retain only the three or four most recent state-proof intervals.
+Measured while writing this: one interval back was available, four back was pruned, and
+everything older returned `500 ledger does not have entry`. So an old capture cannot be
+cross-checked afterwards by anyone, however many operators are asked. The fetch tool
+therefore probes retention, keeps the newest contiguous run, records what it had to drop in
+`beyond_retention`, and corroborates as it captures. `crossnode` distinguishes a pruned
+interval from a broken operator, because an error that invites a retry which cannot work
+wastes the reader's time.
+
+### Verified
+
+The shipped capture set walks from its own first interval to its last (`links_verified=2`,
+`ok=True`) and the derived anchor equals what both operators independently reported for the
+preceding interval — one value from a state-proof walk, one from two operators' ledgers.
+Both `voters_commitment` and `ln_proven_weight` match. Tampering with a claimed round,
+dropping a middle interval, and substituting a different voters commitment are each
+refused. Six library mutations were checked and all six turn the suite red.
+
+### Two things this does not do, stated rather than implied
+
+- **It does not prove the operators are separate businesses.** `algonode` and `nodely` are
+  distinct endpoints; whether they share an upstream, a host or an owner is not established.
+  `provenance.json` records this in its `independence` field in those words.
+- **A genesis hash passed to `anchor.walk` is bookkeeping, not a chain binding.** State
+  proofs carry no genesis field, so it cannot be checked cryptographically; the binding is
+  the anchor's voters commitment, which the proofs *are* verified against. The receipt path
+  is stronger — `expected_genesis_hash_b64` there is checked against the authenticated block
+  header — and the two are not the same guarantee. `tests/test_corroborated_walk.py` asserts
+  this explicitly so nobody "fixes" it by asserting a property the wire format cannot carry.
+
 ## 0.12.0 — the Voi example verifies, and it found a Windows read bug
 
 Publishing readiness work: every command in the README was run against the published package

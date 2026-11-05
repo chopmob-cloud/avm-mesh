@@ -289,6 +289,21 @@ def _build_parser() -> argparse.ArgumentParser:
     a.add_argument("--interval", type=int, default=256)
     a.add_argument("--json", action="store_true")
 
+    x = sub.add_parser("crossnode",
+                       help="check that unrelated node operators agree about an attested "
+                            "interval, so a walk's provenance is not one endpoint's word")
+    x.add_argument("--round", type=int, action="append",
+                   help="attested interval boundary round (a multiple of 256); repeatable")
+    x.add_argument("--bundles", metavar="DIR",
+                   help="also corroborate every round present in this capture directory")
+    x.add_argument("--operator", action="append", metavar="NAME=URL",
+                   help="an operator to ask; repeat. Defaults to two publicly distinct "
+                        "Algorand endpoints")
+    x.add_argument("--min-operators", type=int, default=2,
+                   help="operators that must ANSWER (default 2; 1 is refused as theatre)")
+    x.add_argument("--timeout", type=float, default=25.0)
+    x.add_argument("--json", action="store_true")
+
     return parser
 
 
@@ -364,6 +379,69 @@ def _corroborate(args) -> int:
     return 0 if result.agreed else 2
 
 
+def _crossnode(args) -> int:
+    """Report whether independent operators agree about the interval(s) asked for."""
+    from .crossnode import CorroborationError, corroborate_captures, corroborate_round
+
+    operators = None
+    if args.operator:
+        operators = []
+        for spec in args.operator:
+            if "=" not in spec:
+                print(f"refused: --operator wants NAME=URL, got {spec!r}", file=sys.stderr)
+                return 3
+            name, url = spec.split("=", 1)
+            operators.append((name.strip(), url.strip()))
+
+    wanted: list[int] = list(args.round or [])
+    try:
+        if args.bundles:
+            # The capture directory supplies its own rounds. `--round` used to be required
+            # and then silently dropped whenever `--bundles` was passed, so a user asking
+            # about one interval got answers about others; now both are honoured, in
+            # order, without duplicates.
+            from .crossnode import corroborate_captures
+
+            results = corroborate_captures(args.bundles, operators=operators,
+                                          min_operators=args.min_operators,
+                                          timeout=args.timeout)
+            # A round named by both --round and the directory is checked once.
+            covered = {r.round for r in results}
+            wanted = [r for r in wanted if r not in covered]
+        else:
+            results = []
+        for round_number in wanted:
+            results.append(corroborate_round(round_number, operators=operators,
+                                             min_operators=args.min_operators,
+                                             timeout=args.timeout))
+        if not results:
+            print("refused: give --round, --bundles, or both", file=sys.stderr)
+            return 3
+    except CorroborationError as exc:
+        print(f"refused: {exc}", file=sys.stderr)
+        return 3
+
+    if args.json:
+        print(json.dumps([r.to_dict() for r in results], indent=2))
+    else:
+        for result in results:
+            answered = sum(1 for r in result.responders if r.ok)
+            print(f"round {result.round}")
+            print(f"  operators answering: {answered} of {len(result.responders)} "
+                  f"({args.min_operators} required)")
+            for field_name, detail in result.agreement.items():
+                mark = "AGREE " if detail["agreed"] else "DIFFER"
+                values = sorted({str(v) for v in detail["values"].values()})
+                shown = values[0] if len(values) == 1 else f"{len(values)} distinct values"
+                print(f"  {mark} {field_name}: {shown}")
+            if result.agreed:
+                print("  verdict: corroborated by distinct endpoints")
+                print(f"  caveat: {result.independence}")
+            else:
+                print(f"  verdict: REFUSED -- {result.failure}")
+    return 0 if all(r.agreed for r in results) else 2
+
+
 def main(argv: list[str] | None = None, *, signature_style: str = "raw") -> int:
     """Entry point. ``signature_style`` selects the LEVEL 2 signing convention.
 
@@ -389,6 +467,8 @@ def main(argv: list[str] | None = None, *, signature_style: str = "raw") -> int:
         return _serve(args)
     if args.cmd == "corroborate":
         return _corroborate(args)
+    if args.cmd == "crossnode":
+        return _crossnode(args)
     if args.cmd == "anchor":
         return _anchor(args)
     if args.cmd != "verify":

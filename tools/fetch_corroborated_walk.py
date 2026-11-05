@@ -55,11 +55,18 @@ FIELDS = ("VotersCommitment", "LnProvenWeight", "BlockHeadersCommitment")
 GENESIS = "wGHE2Pwdvd7S12BL5FaOP20EGYesN73ktiC1qzkkit8="
 
 
+#: Same ceiling as `avm_mesh.crossnode.MAX_RESPONSE_BYTES`. Two tools reading the same
+#: endpoint with different limits is how one of them ends up being the soft target.
+MAX_RESPONSE_BYTES = 8 * 1024 * 1024
+
+
 def _get(endpoint: str, path: str, *, timeout: float = 25.0) -> dict:
     request = urllib.request.Request(endpoint.rstrip("/") + path,
                                      headers={"accept": "application/json"})
     with urllib.request.urlopen(request, timeout=timeout) as response:
-        raw = response.read(16 * 1024 * 1024)
+        raw = response.read(MAX_RESPONSE_BYTES + 1)
+    if len(raw) > MAX_RESPONSE_BYTES:
+        raise ValueError(f"{path} returned more than {MAX_RESPONSE_BYTES} bytes")
     return json.loads(raw)
 
 
@@ -180,9 +187,11 @@ def main(argv=None) -> int:
 
     for round_number in rounds:
         responses, agreed_fields, ok = {}, {}, True
+        bodies: dict[str, dict] = {}
         for name, url in operators:
             try:
                 body = _stateproof(url, round_number)
+                bodies[name] = body
             except Exception as exc:
                 responses[name] = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
                 ok = False
@@ -208,12 +217,17 @@ def main(argv=None) -> int:
                 }
                 if len(values) != 1:
                     ok = False
+            # Same rule as `crossnode`: every answering operator must have served a proof,
+            # and they must be the same proof. Including None in the value set happened to
+            # fail here and pass there, which is not a difference of strictness but two
+            # implementations of one rule.
             proofs = {responses[n]["state_proof_sha256"] for n in answering}
+            any_missing = any(not responses[n]["state_proof_sha256"] for n in answering)
             agreed_fields["state_proof_sha256"] = {
-                "agreed": len(proofs) == 1,
+                "agreed": not any_missing and len(proofs) == 1,
                 "values": {n: responses[n]["state_proof_sha256"] for n in answering},
             }
-            if len(proofs) != 1:
+            if any_missing or len(proofs) != 1:
                 ok = False
 
         all_agreed = all_agreed and ok
@@ -223,7 +237,13 @@ def main(argv=None) -> int:
         source = answering[0] if answering else operators[0][0]
         source_url = dict(operators)[source]
         try:
-            body = _stateproof(source_url, round_number)
+            # Reuse the response already fetched above rather than asking a second time.
+            # The second request cost a full state proof in bandwidth and, worse, could
+            # return a different body than the one that was just corroborated -- so the
+            # capture would carry bytes that no operator had agreed about.
+            body = bodies.get(source)
+            if body is None:
+                body = _stateproof(source_url, round_number)
             if "StateProof" not in body or "Message" not in body:
                 raise SystemExit(f"round {round_number}: no StateProof/Message")
             message = _message(body["Message"])

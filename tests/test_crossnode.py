@@ -255,3 +255,59 @@ def test_a_pruned_interval_is_named_as_pruned_not_as_a_failure(fake_algod):
         for s in servers:
             s.shutdown()
             s.server_close()
+
+def test_an_operator_that_answers_without_a_proof_does_not_agree(fake_algod):
+    """The reviewer's finding, reproduced before it was fixed.
+
+    The agreement set was built with `if r.state_proof_sha256`, which dropped the absent
+    case, so {digest, None} reduced to one value and counted as agreement. An operator
+    returning a message and no proof was therefore corroborating. That is precisely the
+    "answered without answering" case this module exists to refuse.
+    """
+    with_proof = fake_algod()
+
+    class NoProof(_Handler):
+        def do_GET(self):  # noqa: N802
+            body = json.dumps({
+                "Message": {
+                    "BlockHeadersCommitment": REAL_HEADERS,
+                    "FirstAttestedRound": 66647553,
+                    "LastAttestedRound": 66647808,
+                    "LnProvenWeight": 2230417,
+                    "VotersCommitment": REAL_VOTERS,
+                }
+                # no StateProof key at all
+            }).encode()
+            self.send_response(200)
+            self.send_header("content-length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    server = HTTPServer(("127.0.0.1", 0), NoProof)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        no_proof = f"http://127.0.0.1:{server.server_address[1]}"
+        result = corroborate_round(66647808,
+                                   operators=[("with", with_proof), ("without", no_proof)])
+        assert result.agreed is False, "an operator with no proof was counted as agreeing"
+        assert "without a state proof" in (result.failure or "")
+        assert result.agreement["state_proof_sha256"]["agreed"] is False
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_a_non_ascii_state_proof_is_refused_rather_than_mangled(fake_algod):
+    """`encode("ascii", "replace")` silently substituted the offending bytes.
+
+    A proof must be base64, so a non-ASCII body is malformed. Mangling it produced a
+    digest of something that was never served, which would then "agree" with nothing.
+    """
+    good = fake_algod()
+    bad = fake_algod(proof="\u00ff not base64")
+    result = corroborate_round(66647808, operators=[("good", good), ("bad", bad)])
+    assert result.agreed is False
+    responses = {r.name: r for r in result.responders}
+    assert responses["bad"].ok is False
+    assert "ASCII base64" in (responses["bad"].error or "")
+    assert "only 1 of 2" in (result.failure or "")

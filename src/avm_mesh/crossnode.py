@@ -176,7 +176,11 @@ def _response(name: str, endpoint: str, round_number: int, *,
     proof = body.get("StateProof")
     digest = None
     if isinstance(proof, str) and proof:
-        digest = hashlib.sha256(proof.encode("ascii", "replace")).hexdigest()
+        try:
+            digest = hashlib.sha256(proof.encode("ascii")).hexdigest()
+        except UnicodeEncodeError:
+            return OperatorResponse(name=name, endpoint=endpoint, ok=False,
+                                    error="StateProof is not ASCII base64 as the spec requires")
 
     return OperatorResponse(
         name=name, endpoint=endpoint, ok=True, last_attested_round=last,
@@ -246,12 +250,22 @@ def corroborate_round(round_number: int, *,
                 + ", ".join(f"{r.name}={getattr(r, field_name)!r}" for r in answered))
             return result
 
-    # The state proof itself, where every operator served one.
+    # The state proof itself. Every answering operator must have served one: filtering out
+    # the absent cases made {digest, None} look like agreement, so an operator replying
+    # with a message and no proof was silently counted as corroborating. That is the
+    # failure mode this whole module exists to prevent, so it is an explicit refusal here
+    # rather than a filtered set.
+    missing_proof = [r.name for r in answered if not r.state_proof_sha256]
     proofs = {r.state_proof_sha256 for r in answered if r.state_proof_sha256}
     result.agreement["state_proof_sha256"] = {
-        "agreed": len(proofs) <= 1,
+        "agreed": not missing_proof and len(proofs) == 1,
         "values": {r.name: r.state_proof_sha256 for r in answered},
     }
+    if missing_proof:
+        result.failure = (
+            f"operator(s) {', '.join(missing_proof)} answered without a state proof, so "
+            "they cannot be said to agree about one")
+        return result
     if len(proofs) > 1:
         result.failure = "operators served different state proofs for the same interval"
         return result

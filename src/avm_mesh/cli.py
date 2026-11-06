@@ -25,6 +25,8 @@ import re
 import errno
 import zlib
 
+from .service import DEFAULT_MAX_RECEIPT_BYTES
+
 #: Anything reachable through `_file_resolver` must collapse to a single path component
 #: that is a normal file living directly under the evidence root. The same guard
 #: logic as `Store._safe_name`: no traversal, no symlinks, no absurd names.
@@ -33,13 +35,24 @@ MAX_PROOF_BYTES_DEFAULT = 8 * 1024 * 1024
 #: A sealed receipt is metadata, not evidence: it names a bundle and a digest and carries
 #: no state proof. 1 MiB is generous for that shape and still bounds the one file the CLI
 #: reads from a counterparty without knowing anything about it.
-MAX_RECEIPT_BYTES = 1 * 1024 * 1024
+#:
+#: Taken from `service` rather than redeclared. The CLI and the witness store previously
+#: carried separate caps (1 MiB and 8 MiB), so a 2 MiB receipt was writable by the store,
+#: servable over HTTP and unreadable by the CLI that consumes it. One bound for one shape.
+MAX_RECEIPT_BYTES = DEFAULT_MAX_RECEIPT_BYTES
 
 #: gzip's two-byte magic, so a compressed proofpack is decoded from its bytes
 #: rather than guessed at from its name. Mirrors `anchor.GZIP_MAGIC`.
 GZIP_MAGIC = b"\x1f\x8b"
 
 _SAFE_NAME = re.compile(r"\A[A-Za-z0-9_.-]{1,128}\Z")
+
+
+class SizeRefused(ValueError):
+    """A file exceeded a byte cap. A ValueError, because it is about an unusable input,
+    but its own type so a caller can tell a refusal-on-size from a malformed document
+    without matching on message text -- which is one wording change from silently
+    mislabelling every size refusal as a syntax error."""
 
 
 def read_bounded_bytes(path: pathlib.Path, *, max_bytes: int) -> bytes:
@@ -76,10 +89,11 @@ def read_bounded_bytes(path: pathlib.Path, *, max_bytes: int) -> bytes:
         if (st.st_mode & 0o170000) != 0o100000:
             raise FileNotFoundError(path)
         if st.st_size > max_bytes:
-            raise ValueError(f"{path} is {st.st_size} bytes, over the {max_bytes} byte cap")
+            raise SizeRefused(
+                f"{path} is {st.st_size} bytes, over the {max_bytes} byte cap")
         data = os.read(fd, max_bytes + 1)
         if len(data) > max_bytes:
-            raise ValueError(
+            raise SizeRefused(
                 f"{path} is at least {len(data)} bytes, over the {max_bytes} byte cap")
         return data
     finally:
@@ -537,16 +551,15 @@ def main(argv: list[str] | None = None, *, signature_style: str = "raw") -> int:
     except OSError as exc:
         print(f"cannot read receipt: {exc}", file=sys.stderr)
         return 3
+    except SizeRefused as exc:
+        # A size refusal and a malformed document are different problems, and calling both
+        # "not valid JSON" sent an operator hunting for a syntax error in a file that was
+        # refused without being parsed. Distinguished by TYPE, not by matching the message:
+        # a wording change must not be able to quietly undo this.
+        print(f"receipt refused on size: {exc}", file=sys.stderr)
+        return 3
     except ValueError as exc:
-        # Two different things raise ValueError here and they are not the same problem: a
-        # size refusal from `read_bounded_bytes` and a malformed document from the JSON
-        # parser. Calling both "not valid JSON" told an operator to go looking for a syntax
-        # error in a file the CLI had refused to read at all.
-        detail = str(exc)
-        if "cap" in detail:
-            print(f"receipt refused on size: {detail}", file=sys.stderr)
-        else:
-            print(f"receipt is not valid JSON: {exc}", file=sys.stderr)
+        print(f"receipt is not valid JSON: {exc}", file=sys.stderr)
         return 3
 
     if args.json:

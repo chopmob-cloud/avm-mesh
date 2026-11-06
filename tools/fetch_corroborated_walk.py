@@ -29,12 +29,13 @@ Stdlib only.
 from __future__ import annotations
 
 import argparse
-import gzip
 import base64
+import gzip
 import hashlib
 import json
 import pathlib
 import sys
+import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 
@@ -99,12 +100,19 @@ def _stateproof(endpoint: str, round_number: int) -> dict:
 
 
 def _probe(endpoint: str, round_number: int, timeout: float) -> bool:
-    """Whether this operator still retains that interval's state proof."""
+    """Whether this operator still retains that interval's state proof.
+
+    Catches the three ways an interval can be *absent* -- an HTTP error, an unreachable
+    host, a body that is not JSON -- and nothing else. A bare `except Exception` here
+    would report a bug in this tool as "the operator has pruned that interval", which is a
+    wrong diagnosis rather than a missing one, and it was the last broad catch left after
+    the same pattern was removed from `crossnode`.
+    """
     try:
         body = _get(endpoint, f"/v2/stateproofs/{round_number}", timeout=timeout)
-        return "StateProof" in body and "Message" in body
-    except Exception:
+    except (urllib.error.HTTPError, urllib.error.URLError, json.JSONDecodeError, OSError):
         return False
+    return isinstance(body, dict) and "StateProof" in body and "Message" in body
 
 
 def _sha256_bytes(raw: bytes) -> str:

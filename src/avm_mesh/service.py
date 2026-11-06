@@ -42,6 +42,12 @@ _SAFE_NAME = re.compile(r"\A[A-Za-z0-9_-]{1,128}\Z")
 #: A witness refuses to serve a proofpack larger than this. Real ones are ~0.4-0.9 MB;
 #: the cap exists so a hostile or broken store cannot make a witness stream gigabytes.
 DEFAULT_MAX_PROOF_BYTES = 8 * 1024 * 1024
+#: A receipt is metadata: it names a bundle and a digest and carries no state proof, so it
+#: must never rival the proofpack it points at. The CLI and the store share this one value
+#: deliberately -- when the store allowed 8 MiB and the CLI 1 MiB, a 2 MiB receipt was
+#: writable, servable and unreadable by the tool that consumes it, which is a witness
+#: producing a receipt no client can open.
+DEFAULT_MAX_RECEIPT_BYTES = 1 * 1024 * 1024
 #: Requests per client address per window, and the window length.
 DEFAULT_RATE_LIMIT = 120
 DEFAULT_RATE_WINDOW_S = 10.0
@@ -90,11 +96,16 @@ class Store:
     """Filesystem store: proofpacks by digest, receipts by txid."""
 
     def __init__(self, root: pathlib.Path | str,
-                 max_proofpack_bytes: int = DEFAULT_MAX_PROOF_BYTES) -> None:
+                 max_proofpack_bytes: int = DEFAULT_MAX_PROOF_BYTES,
+                 max_receipt_bytes: int = DEFAULT_MAX_RECEIPT_BYTES) -> None:
         if not isinstance(max_proofpack_bytes, int) or isinstance(max_proofpack_bytes, bool) \
                 or max_proofpack_bytes <= 0:
             raise MeshError("max_proofpack_bytes must be a positive integer")
+        if not isinstance(max_receipt_bytes, int) or isinstance(max_receipt_bytes, bool) \
+                or max_receipt_bytes <= 0:
+            raise MeshError("max_receipt_bytes must be a positive integer")
         self.max_proofpack_bytes = max_proofpack_bytes
+        self.max_receipt_bytes = max_receipt_bytes
         self.root = pathlib.Path(root)
         self.proofpacks = self.root / "proofpacks"
         self.receipts = self.root / "receipts"
@@ -137,6 +148,10 @@ class Store:
             raise MeshError("put_receipt expects a SettlementReceipt")
         _safe_name(receipt.txid, "txid")
         payload = json.dumps(receipt.to_dict(), sort_keys=True, separators=(",", ":"))
+        if len(payload.encode("utf-8")) > self.max_receipt_bytes:
+            raise MeshError(
+                f"receipt for {receipt.txid} is over the {self.max_receipt_bytes} byte "
+                "limit; a receipt names its evidence rather than carrying it")
         digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
         path = self.receipts / f"{receipt.txid}.json"
         sidecar = self.receipts / f"{receipt.txid}.sha256"
@@ -221,9 +236,9 @@ class Store:
         # Same bound as a proofpack, for the same reason: the file is served to callers and
         # `put_receipt` is not the only way one can appear in this directory. A receipt is
         # metadata, so this limit is generous rather than tight.
-        if path.stat().st_size > self.max_proofpack_bytes:
+        if path.stat().st_size > self.max_receipt_bytes:
             raise MeshError(
-                f"stored receipt {txid} is over the {self.max_proofpack_bytes} byte limit")
+                f"stored receipt {txid} is over the {self.max_receipt_bytes} byte limit")
         raw = path.read_text(encoding="utf-8")
         sidecar = self.receipts / f"{txid}.sha256"
         if sidecar.is_file():

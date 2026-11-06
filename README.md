@@ -585,10 +585,15 @@ independent. That is what the check above is for.
 
 The portable test gate runs **531 tests with 0 skipped** on both Python 3.12 and Python 3.10.22 (an isolated
 clean-room run: offline install from wheels only, plus the trust-boundary audit and the red-team suite), so
-`Requires-Python: >=3.10` is demonstrated rather than asserted. (537 tests are collected in total. This host skips six: four symlink checks, which need a platform that can create one — they run on the Linux clean room rather than skip there — and two that require the optional signing environment.) Three test-only Falcon *signer* checks are
-marked `signer` and run separately in a signer-enabled environment; they pass with `pqcrypto` 0.1.0, which
-is deliberately not a runtime dependency. CI runs the portable suite with the test fixture provisioned, and
-a missing fixture is treated as a failure, not a skip.
+`Requires-Python: >=3.10` is demonstrated rather than asserted.
+
+537 tests are collected in total. The portable gate deselects three test-only Falcon *signer* checks, which run
+separately in a signer-enabled environment and pass with `pqcrypto` 0.1.0 — deliberately not a runtime
+dependency. With the fixtures provisioned this Windows host skips six, all of them symlink checks needing a
+platform that can create one (`test_anchor.py` twice, `test_cli_gzip.py`, `test_file_resolver.py` twice,
+`test_service.py`); they run rather than skip on the Linux clean room, which is how it reports 534 tests with
+0 skipped. CI runs the portable suite with the test fixture provisioned, and a missing fixture is treated as a
+failure, not a skip.
 
 **Licence:** Apache-2.0, with `LICENSE` and `NOTICE` present in the repository, the wheel and the sdist,
 plus PEP 639 `License-Expression` metadata and no contradicting classifier — all checked inside the built

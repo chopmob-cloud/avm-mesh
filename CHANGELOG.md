@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.13.2 — final validation: one receipt bound, typed refusals, an honest probe
+
+Final full validation of 0.13.1 — six independent findings, each reproduced before acting.
+Two refuted with output, four real.
+
+### Fixed
+
+- **Two caps for one shape.** Reproduced: the store allowed 8 MiB and the CLI 1 MiB, so a
+  2 MiB receipt was writable by `put_receipt`, servable over HTTP, and unreadable by the CLI
+  that consumes it — a witness producing receipts no client can open. One shared
+  `DEFAULT_MAX_RECEIPT_BYTES` now governs both, imported rather than redeclared, and it is
+  enforced on **write** as well as on read so the unservable state cannot be created.
+- **A size refusal was told apart from a syntax error by matching message text.** One
+  wording change would have silently reverted to reporting every size refusal as malformed
+  JSON. Now a `SizeRefused(ValueError)` caught by type.
+- **A bare `except Exception` survived in the capture tool's `_probe`.** It returned False
+  rather than passing, but it read a `NameError` or `TypeError` in our own module as "the
+  operator has pruned that interval" — blaming the operator for our defect. It now catches
+  the exceptions that represent absence and lets a real bug propagate.
+- A stray `"ConnectionAborted"` in a shedding-outcome tuple, which no code path here can
+  emit, beside the correct `ConnectionAbortedError`.
+
+### Refuted, with reproductions
+
+- `type(round_number) is not int` rejecting `bool` is correct: a boolean round is a caller
+  bug, and `--round true` must not silently mean round 1.
+- `_get` "does not handle non-2xx" is wrong: `urlopen` **raises** `HTTPError` on a non-2xx
+  response, so a status check after the call is unreachable. Reproduced against a 404.
+
+### Documentation
+
+The README claimed the portable gate runs **391 tests**; it runs 531, with 537 collected — a
+numeral the code could move, drifted across three releases. The skip reasons beside it said
+"a live fixture" where four of the six are symlink checks that need a platform able to create
+one, which is why they run rather than skip on the Linux clean room (534 tests, 0 skipped).
+
 ## 0.13.1 — every external reader bounded, and the shed response actually arrives
 
 A sweep of all 19 I/O call sites rather than the ones I remembered. Three defects.

@@ -151,8 +151,11 @@ def test_saturation_sheds_load_with_503_rather_than_growing(tmp_path):
         # The test failed on Windows for months of runs' worth of time by treating one
         # of the acceptable aborts as a failure, which is a test bug rather than a server
         # one: the assertion was written against the Linux behaviour.
+        # Names as `type(exc).__name__` produces them -- the bare "ConnectionAborted"
+        # that sat here matched nothing this code can emit and suggested a misunderstanding
+        # of the mechanism being tested.
         shed = (503, "ConnectionResetError", "ConnectionRefusedError",
-                "ConnectionAbortedError", "ConnectionAborted", "URLError", "timeout")
+                "ConnectionAbortedError", "URLError", "timeout")
         assert not any(code == 200 for code in codes), \
             f"a saturated server SERVED a request instead of shedding: {codes}"
         assert any(code in shed for code in codes), codes

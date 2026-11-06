@@ -71,12 +71,47 @@ def test_the_receipt_cap_is_smaller_than_the_evidence_cap():
     assert cli.MAX_RECEIPT_BYTES < cli.MAX_PROOF_BYTES_DEFAULT
 
 
-# ------------------------------------------------------------------ the served store
+def test_the_cli_and_the_store_share_one_receipt_bound():
+    """Two caps for one shape is how a witness produces receipts no client can open.
+
+    Reproduced before this was fixed: the store allowed 8 MiB and the CLI 1 MiB, so a
+    2 MiB receipt was writable, servable over HTTP, and unreadable by the CLI that
+    consumes it. They now come from the same constant.
+    """
+    from avm_mesh.service import DEFAULT_MAX_RECEIPT_BYTES
+
+    assert cli.MAX_RECEIPT_BYTES == DEFAULT_MAX_RECEIPT_BYTES
+    assert Store.__init__.__defaults__[-1] == DEFAULT_MAX_RECEIPT_BYTES
+
+
+def test_the_store_refuses_to_write_a_receipt_it_could_not_serve(tmp_path):
+    """Refused at write time, so the unservable state cannot be created at all."""
+    from avm_mesh.receipt import ProofpackPointer, SettlementReceipt
+
+    store = Store(tmp_path / "store", max_receipt_bytes=200)
+    digest = "a" * 64
+    # A valid name and a valid pointer: the size must be the ONLY reason this is refused,
+    # or the test proves the name guard rather than the size guard.
+    receipt = SettlementReceipt(
+        version=1, chain="mainnet-v1.0", txid="TX-BIG", round=66457600,
+        trust_root="structural",
+        pointer=ProofpackPointer(uri=f"proofpack:{digest}" + "/" + "u" * 300,
+                                 digest=digest,
+                                 first_attested_round=66457344,
+                                 last_attested_round=66457600))
+
+    with pytest.raises(MeshError, match="byte limit"):
+        store.put_receipt(receipt)
+    # and nothing was left behind by the refusal
+    assert not (store.receipts / f"{receipt.txid}.json").exists()
+
+
+# ------------------------------------------------------- the served store (reads)
 
 
 def test_the_store_refuses_to_serve_an_oversized_receipt(tmp_path):
     """`put_receipt` is not the only way a file reaches this directory."""
-    store = Store(tmp_path / "store", max_proofpack_bytes=1024)
+    store = Store(tmp_path / "store", max_receipt_bytes=1024)
     path = store.receipts / "TX1.json"
     path.write_text('{"pad": "' + "x" * 2000 + '"}', encoding="utf-8")
 
@@ -91,3 +126,42 @@ def test_the_store_still_serves_a_normal_receipt(tmp_path):
     path.write_text(json.dumps({"txid": "TX2", "round": 1}), encoding="utf-8")
     got = store.get_receipt("TX2")
     assert got["txid"] == "TX2"
+
+
+# ----------------------------------------------------- the capture-time probe
+
+
+def test_a_bug_in_the_probe_is_not_reported_as_a_pruned_interval(tmp_path):
+    """The probe must only swallow the ways an interval can be ABSENT.
+
+    `except Exception: return False` reads a NameError, a TypeError or a typo in this very
+    module as "the operator has pruned that interval" -- a wrong diagnosis rather than a
+    missing one, and the operator gets blamed for our defect. Narrowing the catch means a
+    real bug propagates; this pins that.
+    """
+    import importlib.util
+
+    tool = pathlib.Path(__file__).resolve().parents[1] / "tools" / "fetch_corroborated_walk.py"
+    spec = importlib.util.spec_from_file_location("fcw", tool)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    def boom(endpoint, path, timeout=25.0):
+        raise NameError("a bug in this module, not a network condition")
+
+    original, module._get = module._get, boom
+    try:
+        with pytest.raises(NameError):
+            module._probe("https://example.invalid", 66647808, 25.0)
+    finally:
+        module._get = original
+
+    # and the absence cases still return False rather than raising
+    def missing(endpoint, path, timeout=25.0):
+        raise OSError("connection refused")
+
+    original, module._get = module._get, missing
+    try:
+        assert module._probe("https://example.invalid", 66647808, 25.0) is False
+    finally:
+        module._get = original

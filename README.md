@@ -583,9 +583,9 @@ independent. That is what the check above is for.
 
 **Version `0.13.1`** — `pip install avm-mesh`.
 
-The portable test gate runs **391 tests with 0 skipped** on both Python 3.12 and Python 3.10.22 (an isolated
+The portable test gate runs **531 tests with 0 skipped** on both Python 3.12 and Python 3.10.22 (an isolated
 clean-room run: offline install from wheels only, plus the trust-boundary audit and the red-team suite), so
-`Requires-Python: >=3.10` is demonstrated rather than asserted. Three test-only Falcon *signer* checks are
+`Requires-Python: >=3.10` is demonstrated rather than asserted. (537 tests are collected in total. This host skips six: four symlink checks, which need a platform that can create one — they run on the Linux clean room rather than skip there — and two that require the optional signing environment.) Three test-only Falcon *signer* checks are
 marked `signer` and run separately in a signer-enabled environment; they pass with `pqcrypto` 0.1.0, which
 is deliberately not a runtime dependency. CI runs the portable suite with the test fixture provisioned, and
 a missing fixture is treated as a failure, not a skip.

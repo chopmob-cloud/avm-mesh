@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.13.3 — the skip reasons in the README were wrong, and this corrects them
+
+0.13.2 said the six skipped tests were "four symlink checks and two that require the optional
+signing environment". Both halves of that were wrong, and I wrote it without checking: `-rs`
+reports **six skips, all of them symlink checks**, and the signer tests were never skipped at
+all — they are *deselected* by the `-m 'not signer'` marker, which `--co` confirms as
+`534/537 collected (3 deselected)`.
+
+### Fixed
+
+- The README paragraph now states what the runs actually report: 537 collected, three `signer`
+  tests deselected, six symlink skips on this Windows host, and 534 with 0 skipped on the Linux
+  clean room. Every numeral is re-derived from a live run rather than counted by hand.
+- The paragraph also repeated the signer explanation twice; it says it once now.
+
+### Why this is worth a release rather than a note
+
+The README is the PyPI `long_description`. A reader comparing "six skips" with a visible
+`6 skipped, 3 deselected` line would have found the document disagreeing with its own
+evidence, which is the one thing this project cannot afford. The defect is small; the pattern
+behind it — stating a fact about a run without reading the run's output — is the same one that
+produced a fabricated metric in a repository description a day earlier.
+
 ## 0.13.2 — final validation: one receipt bound, typed refusals, an honest probe
 
 Final full validation of 0.13.1 — six independent findings, each reproduced before acting.

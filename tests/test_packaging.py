@@ -86,3 +86,37 @@ def test_build_requires_a_setuptools_that_understands_pep639():
     assert setuptools_pin, f"setuptools not pinned: {pins}"
     minimum = int(re.search(r">=\s*(\d+)", setuptools_pin).group(1))
     assert minimum >= 77, f"setuptools>={minimum} predates PEP 639 support (needs >=77)"
+
+
+def test_the_readme_states_the_version_that_ships():
+    """All four places the version appears must agree.
+
+    The wheel, the sdist metadata and `__version__` were compared by
+    `tools/check_artifacts.py`, and none of the three looked at the README -- so 0.13.3
+    shipped with a PyPI page announcing "Version 0.13.2". The packaging gate was
+    consistent with itself and wrong about the one place a user reads first.
+    """
+    import re
+    import avm_mesh
+
+    # No TOML library, deliberately. `tomllib` is 3.11+ and this project supports 3.10,
+    # while `tomli` is installed by the clean room but NOT by the CI test leg -- so any
+    # import here would pass locally and fail on the floor interpreter. That is exactly
+    # the shape of defect this guard exists to catch, and shipping it inside the guard
+    # would have been the joke telling itself.
+    #
+    # The version is the one string anchored at the start of a line in `[project]`, which
+    # is a narrower claim than "pyproject.toml parses" but needs nothing imported.
+    pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    match = re.search(r'^version\s*=\s*"([^"]+)"', pyproject, re.MULTILINE)
+    assert match, "no version line found in pyproject.toml"
+    declared = match.group(1)
+
+    assert avm_mesh.__version__ == declared, (
+        f"__init__.py says {avm_mesh.__version__!r}, pyproject says {declared!r}")
+
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    stated = re.findall(r"\*\*Version `([0-9][^`]*)`\*\*", readme)
+    assert stated, "README no longer states a version; this guard cannot see it"
+    assert set(stated) == {declared}, (
+        f"README states {sorted(set(stated))}, package is {declared}")

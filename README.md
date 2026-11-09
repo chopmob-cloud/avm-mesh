@@ -9,6 +9,10 @@ mine?* `avm-mesh` answers it with a **settlement receipt** — a tiny digest-and
 cryptographic evidence anchored in the chain's own consensus. A third party who was not present, and who
 trusts neither counterparty, can verify that receipt offline against a genesis hash they pinned themselves.
 
+And they need not take one server's word for the anchor either: `avm-mesh crossnode` asks several unrelated
+node operators about the same attested interval and requires them to agree, so a single operator serving a
+consistent fiction is caught rather than believed.
+
 For the fuller rationale — and the gaps that still sit between a receipt format and fully decentralised
 agentic commerce — see [`docs/WHY.md`](docs/WHY.md). For what is and is not proven yet, see
 [Honest limits](#honest-limits) at the end.
@@ -48,7 +52,7 @@ verification is entirely offline.
 'stake_attested'
 ```
 
-The package installs one command-line tool, `avm-mesh`, with four subcommands:
+The package installs one command-line tool, `avm-mesh`, with five subcommands:
 
 | Command | What it does |
 |---|---|
@@ -56,6 +60,7 @@ The package installs one command-line tool, `avm-mesh`, with four subcommands:
 | `avm-mesh serve` | run a *witness* that serves receipts and evidence over a content-addressed store |
 | `avm-mesh anchor` | derive a trust anchor by walking state proofs forward from a checkpoint you pin |
 | `avm-mesh corroborate` | ask several witnesses for one receipt and check that they agree |
+| `avm-mesh crossnode` | ask unrelated **node operators** about one interval, so an anchor is not one endpoint's word |
 
 A *witness* and an *anchor* are both explained below. For now: a witness is simply something that serves
 evidence, and an anchor is the trusted starting point you supply yourself.
@@ -139,11 +144,11 @@ no longer provides a Falcon verifier. The reasoning, what replaces it, and what 
 | `service` | the **witness**: serves receipts and content-addressed proofpacks |
 | `receipt` | the digest-and-pointer, with its three enforced bindings |
 | `attestation` | the Level 3 consensus attestation, which requires an anchor |
-| `sealed` | the wire format the payment rails already speak |
+| `sealed` | the wire format the payment rails are expected to speak — see Honest limits; never round-tripped |
 | `trust` | one auditable policy document holding every pin |
 | `bond` | witness bonds and the independence rules around them |
 | `a2a` | the settlement-evidence extension for agent-to-agent transport |
-| `cli` | the offline verifier and tools (`avm-mesh verify` / `serve` / `anchor` / `corroborate`) |
+| `cli` | the offline verifier and tools (`verify` / `serve` / `anchor` / `corroborate` / `crossnode`) |
 
 A safe deployment needs just two things you provide yourself: an **anchor** you obtained independently, and
 a **policy** — a single document that pins the chain, genesis hash, anchor and witness set. Everything else
@@ -250,8 +255,8 @@ that anchor and fails closed without it — never from the bundle's own word. Th
 checked against the *authenticated* state-proof header, not the attestation's self-declared field.
 
 Exit codes: `0` verified, `2` failed, `3` usage error. Add `--json` for machine-readable output. For a sense
-of scale, a real receipt is **945 bytes** against an 854 KB proofpack, and the proof is stored once per
-attested interval, not per payment.
+of scale, the shipped receipts are **1161 and 1213 bytes** against an 854 KB proofpack, and the proof is
+stored once per attested interval, not per payment.
 
 ### Running a witness
 
@@ -274,7 +279,8 @@ slow clients:
 - at most 64 connections are handled at once — beyond that the witness answers `503` rather than accepting
   everything and spawning a thread per connection.
 
-Operators can tune these with `--max-proofpack-bytes`, `--rate-limit` and `--rate-window`.
+Operators can tune these with `--max-proofpack-bytes`, `--rate-limit`, `--rate-window` and
+`--max-connections`.
 
 One deployment caveat worth calling out: **behind a reverse proxy, these limits key on the socket peer
 address** — which is the proxy, not the real client. Every user then shares one quota, and forwarded-client
@@ -318,10 +324,11 @@ attested:    J6FPFF4CKP4XUWUEDLEENV7EV5YDKFZHZJC6UYYWBDVBJLAT7IIA @ round 664576
 
 ### Checking that the capture came from more than one operator
 
-Every attestation used to rest on one endpoint's word, which the README said plainly and left at that.
-`crossnode` closes it: fetch the same interval from operators believed to be distinct and require their
-independent answers to agree on the signing set, the proven weight, the block-headers commitment and the
-proof itself.
+Verification proves a proof is valid; it never proves who gave it to you. A walk can verify every interval
+and still be worthless if one operator served a consistent fiction — and nothing about a state proof says
+where it came from. `crossnode` closes that: fetch the same interval from operators believed to be distinct
+and require their independent answers to agree on the signing set, the proven weight, the block-headers
+commitment and the proof itself.
 
 ```sh
 # pick a round within the last few intervals; they are pruned after that
@@ -399,9 +406,6 @@ authenticated 2 interval(s) from the checkpoint
 target round:        66648064
 --voters-commitment  00xqo/JW/ldbMWflfITg9UmhaD0/iib4xwXD8dsYYaROni9RWNcvaarkFYdhR7Q45xTTE/CDeRYpMM1M3j9cOg==
 --ln-proven-weight   2230295
-trust basis:         pinned checkpoint; every interval verified forward from it
---voters-commitment  71Oh0YaxEA59JIgWUjMmnpz0KG8lWJ2jwXQiTYxp15FulxCMNfHfBMHT/8hyTNv2tMdWZl+YOz8go5DczFfuLw==
---ln-proven-weight   2230418
 trust basis:         pinned checkpoint; every interval verified forward from it
 ```
 
@@ -499,8 +503,9 @@ rejected when it is constructed.
 ## Trust tiers are per chain, on purpose
 
 Only **Algorand** and **Voi** have Falcon state proofs; Hedera, Stellar, Base, Solana and Tempo do not.
-Rather than claim equal assurance across all seven chains — which would be its own kind of dishonesty —
-`avm-mesh` reports a tier per chain:
+The wider AlgoVoi rails estate carries seven chains; this library ships chain identifiers for three
+(Algorand mainnet, Algorand testnet, Voi mainnet) and refuses an attestation for anything else. Rather than
+borrow the estate's breadth in a claim it cannot back, `avm-mesh` reports a tier per chain:
 
 | Tier | Means |
 |---|---|
@@ -583,15 +588,15 @@ independent. That is what the check above is for.
 
 **Version `0.13.3`** — `pip install avm-mesh`.
 
-The portable test gate runs **531 tests with 0 skipped** on both Python 3.12 and Python 3.10.22 (an isolated
+The portable test gate runs **535 tests with 0 skipped** on both Python 3.12 and Python 3.10.22 (an isolated
 clean-room run: offline install from wheels only, plus the trust-boundary audit and the red-team suite), so
 `Requires-Python: >=3.10` is demonstrated rather than asserted.
 
-537 tests are collected in total. The portable gate deselects three test-only Falcon *signer* checks, which run
+538 tests are collected in total. The portable gate deselects three test-only Falcon *signer* checks, which run
 separately in a signer-enabled environment and pass with `pqcrypto` 0.1.0 — deliberately not a runtime
 dependency. With the fixtures provisioned this Windows host skips six, all of them symlink checks needing a
 platform that can create one (`test_anchor.py` twice, `test_cli_gzip.py`, `test_file_resolver.py` twice,
-`test_service.py`); they run rather than skip on the Linux clean room, which is how it reports 534 tests with
+`test_service.py`); they run rather than skip on the Linux clean room, which is how it reports 535 tests with
 0 skipped. CI runs the portable suite with the test fixture provisioned, and a missing fixture is treated as a
 failure, not a skip.
 
@@ -613,18 +618,20 @@ built wheels offline and runs against site-packages.
 | Level 3 consensus attestation, anchor-required | shipped |
 | Corroboration across witnesses (`corroborate`) | shipped 0.5.0 |
 | Anchor derivation (`anchor`): checkpoint walk over verified intervals | shipped 0.7.0; **proven across two intervals** in 0.10.0, see below |
+| **Cross-node corroboration (`crossnode`)**: unrelated operators must agree on the signing set, proven weight, block-headers commitment and the proof | shipped 0.13.0; **capture-time only** — see below |
 | Witness discovery (`--directory`, `/.well-known/mesh-directory.json`) | shipped 0.6.0 |
 | Worked mainnet example (`examples/`) | shipped 0.6.0 |
 | Service resource bounds (size cap, rate limit, slowloris timeout) | shipped 0.6.0 |
-| A2A settlement-evidence extension (v1.0 wire format) | shipped; parsed by `a2a-sdk` 1.3.0; TCK `must`/jsonrpc is a **required CI gate** (80 passed, 0 failed) |
+| A2A settlement-evidence extension (v1.0 wire format) | shipped; parsed by `a2a-sdk` 1.3.0; TCK `must`/jsonrpc is a **required CI gate** (80 passed, 155 skipped as inapplicable at `--level must`, 0 failed) |
 | Rails adoption kit (`avm_mesh.rails`) | shipped; **not yet round-tripped** against a real rails receipt |
+| Corroborated walk captures (`examples/walk-mainnet-corroborated/`) | shipped 0.13.0 — three intervals, two operators agreeing, walk derived from the proofs alone |
 | Witness bonding (`bond.py`) | model only — **no on-chain escrow**, see Honest limits |
 
 **Dependency note:** `avm-proofpack>=0.4.1`, the version in which `stake_attested` became anchor-required.
 Level 3 never authenticates from a bundle's own `previous_message` in any version after 0.1.0.
 
 **A2A conformance, precisely.** The project's own system-under-test runs the TCK at
-`--level must --transport jsonrpc` as a **required CI job** — 80 passed, 0 failed — after that job surfaced
+`--level must --transport jsonrpc` as a **required CI job** — 80 passed, 155 skipped, 0 failed — after that job surfaced
 one real defect that was then fixed (a `text/plain` body returned `ParseError -32700` instead of
 `ContentTypeNotSupportedError -32005`; it now answers HTTP 415 before the parser). That is protocol
 conformance for the transport the project claims. It is **not** extension validation: the TCK's
@@ -658,8 +665,9 @@ proof does not attest.
   goods actually shipped is not an on-chain fact.
 - **Corroboration is a capture-time property.** It cannot be established after the fact, and two endpoints
   run by one operator are not independent witnesses. It is recorded, not counted.
-- **Capture is time-sensitive.** Nodes retain roughly two state-proof intervals (~512 rounds, about 20
-  minutes). Miss that window and the bundle falls back to `unattested`.
+- **Capture is time-sensitive.** Measured against public Algorand endpoints while building the cross-node
+  check: three or four state-proof intervals are retained, not two. Miss that window and the interval cannot
+  be captured or cross-checked by anyone, and a bundle built from it falls back to `unattested`.
 - **Falcon verification is only as good as the genesis hash you pin.** Ship that hash inside your
   application, rather than fetching it over the wire.
 - **Bonding is a model, not a market.** `bond.py` enforces independence and threshold arithmetic over

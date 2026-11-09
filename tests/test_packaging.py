@@ -98,10 +98,19 @@ def test_the_readme_states_the_version_that_ships():
     """
     import re
     import avm_mesh
-    import tomllib
 
-    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
-    declared = pyproject["project"]["version"]
+    # No TOML library, deliberately. `tomllib` is 3.11+ and this project supports 3.10,
+    # while `tomli` is installed by the clean room but NOT by the CI test leg -- so any
+    # import here would pass locally and fail on the floor interpreter. That is exactly
+    # the shape of defect this guard exists to catch, and shipping it inside the guard
+    # would have been the joke telling itself.
+    #
+    # The version is the one string anchored at the start of a line in `[project]`, which
+    # is a narrower claim than "pyproject.toml parses" but needs nothing imported.
+    pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    match = re.search(r'^version\s*=\s*"([^"]+)"', pyproject, re.MULTILINE)
+    assert match, "no version line found in pyproject.toml"
+    declared = match.group(1)
 
     assert avm_mesh.__version__ == declared, (
         f"__init__.py says {avm_mesh.__version__!r}, pyproject says {declared!r}")

@@ -102,3 +102,28 @@ def test_the_tool_refuses_when_head_is_below_one_interval(monkeypatch, tmp_path,
                    "--out", str(tmp_path / "out")])
     assert code == 2
     assert "below one state-proof interval" in capsys.readouterr().err
+
+
+def test_hops_zero_is_refused_not_an_IndexError(monkeypatch, tmp_path, capsys):
+    """`--hops 0` made `requested` empty and then indexed it.
+
+    Reproduced: an IndexError with no output. A usage error should name the argument, so the
+    refusal happens at validation rather than surfacing as a traceback from deep in the tool.
+    """
+    m = _module()
+    monkeypatch.setattr(m, "_status", lambda endpoint: {"last-round": 1_000_000})
+    code = m.main(["--hops", "0",
+                   "--operator", "a=http://a.invalid", "--operator", "b=http://b.invalid",
+                   "--out", str(tmp_path / "out")])
+    assert code == 2
+    assert "--hops must be at least 1" in capsys.readouterr().err
+
+
+def test_a_negative_hop_count_is_refused(monkeypatch, tmp_path, capsys):
+    m = _module()
+    monkeypatch.setattr(m, "_status", lambda endpoint: {"last-round": 1_000_000})
+    code = m.main(["--hops", "-3",
+                   "--operator", "a=http://a.invalid", "--operator", "b=http://b.invalid",
+                   "--out", str(tmp_path / "out")])
+    assert code == 2
+    assert "--hops must be at least 1" in capsys.readouterr().err

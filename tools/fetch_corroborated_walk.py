@@ -148,6 +148,11 @@ def main(argv=None) -> int:
                   "http:// or https://", file=sys.stderr)
             return 2
         operators.append((name, url))
+    if args.hops < 1:
+        # A walk needs at least one interval to capture; `requested[0]` below assumes a
+        # non-empty list, and an IndexError is not how a usage error should present.
+        print(f"refusing: --hops must be at least 1, got {args.hops}", file=sys.stderr)
+        return 2
     if not operators:
         operators = list(OPERATORS)
     if len(operators) < 2:
@@ -172,9 +177,11 @@ def main(argv=None) -> int:
               "there is no completed interval to capture", file=sys.stderr)
         return 2
     requested = [newest - INTERVAL * i for i in range(args.hops)][::-1]
-    if requested[0] < 0:
+    if requested and requested[0] < 0:
         # Clamp rather than refuse: asking for more hops than the chain has history for
-        # should capture what exists, and `_probe` will drop the rest honestly.
+        # should capture what exists. Rounds below zero are dropped here; rounds the
+        # operators no longer retain are then dropped by the retention probe further down,
+        # which records them in `beyond_retention` rather than silently ignoring them.
         requested = [r for r in requested if r >= 0]
 
     print(f"head (min across operators): {head}")

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import base64
 import json
+import pathlib
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -117,9 +118,39 @@ class TrustPolicy:
             )
 
 
+#: A policy is a small document of pins: a chain, a genesis hash, an anchor and a witness
+#: set. 256 KiB is far more than that shape needs and still bounds a file a stranger hands
+#: you. The receipt and proofpack readers were bounded in earlier releases and this one was
+#: missed -- the same defect shape each time: the guard was written for the path someone was
+#: thinking about rather than for the category.
+MAX_POLICY_BYTES = 256 * 1024
+
+
 def load_policy(path: str) -> TrustPolicy:
-    with open(path, "r", encoding="utf-8") as f:
-        return TrustPolicy.from_dict(json.load(f))
+    """Read a policy document, refusing one larger than MAX_POLICY_BYTES.
+
+    Bounded before parse rather than after: the point is not to survive a large document,
+    it is to never build the string. Opened "rb" so a text-mode descriptor cannot stop at a
+    0x1A byte on Windows and hand back a truncated document that parses.
+    """
+    target = pathlib.Path(path)
+    # OSError is deliberately NOT wrapped. A missing or unreadable file is an I/O
+    # condition, and `tests/test_fail_closed.py` pins that it surfaces as OSError so a
+    # caller can tell "not there" from "malformed". The suite's contract is that
+    # MALFORMED input raises MeshError -- not that every failure does. Wrapping this was
+    # my change and it broke that pin, which the clean room caught on both interpreters.
+    size = target.stat().st_size
+    if size > MAX_POLICY_BYTES:
+        raise MeshError(
+            f"policy {path} is {size} bytes, over the {MAX_POLICY_BYTES} byte cap")
+    raw = target.read_bytes()
+    if len(raw) > MAX_POLICY_BYTES:                 # grow between stat and read
+        raise MeshError(
+            f"policy {path} grew past the {MAX_POLICY_BYTES} byte cap while being read")
+    try:
+        return TrustPolicy.from_dict(json.loads(raw.decode("utf-8-sig")))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise MeshError(f"policy {path} is not valid UTF-8 JSON: {exc}") from exc
 
 
 def verify_with_policy(receipt, resolve, policy: TrustPolicy):

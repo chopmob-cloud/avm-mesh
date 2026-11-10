@@ -165,3 +165,80 @@ def test_a_bug_in_the_probe_is_not_reported_as_a_pruned_interval(tmp_path):
         assert module._probe("https://example.invalid", 66647808, 25.0) is False
     finally:
         module._get = original
+
+
+# ----------------------------------------------------------- the policy document
+
+
+def test_an_oversized_policy_is_refused_before_parsing(tmp_path):
+    """`load_policy` is public API and reads a file a counterparty may have chosen.
+
+    Bounded before parse, so the string is never built. Same defect class as the receipt
+    read that shipped unbounded until 0.13.1: the guard was written for the path someone
+    was thinking about, not for every path a stranger's file can arrive through.
+    """
+    from avm_mesh.trust import MAX_POLICY_BYTES, load_policy
+
+    path = tmp_path / "policy.json"
+    path.write_text('{"pad": "' + "x" * (MAX_POLICY_BYTES + 1) + '"}', encoding="utf-8")
+
+    with pytest.raises(MeshError, match="byte cap"):
+        load_policy(str(path))
+
+
+def test_a_policy_exactly_at_the_cap_is_attempted(tmp_path):
+    """The bound must not be an off-by-one that rejects the largest legal document."""
+    from avm_mesh.trust import MAX_POLICY_BYTES, load_policy
+
+    path = tmp_path / "policy.json"
+    body = "{}"
+    path.write_text(body + " " * (MAX_POLICY_BYTES - len(body)), encoding="utf-8")
+    assert path.stat().st_size == MAX_POLICY_BYTES
+
+    # It reaches the parser and fails there, which is a different error.
+    with pytest.raises(MeshError, match="not valid UTF-8 JSON|required|missing"):
+        load_policy(str(path))
+
+
+def test_a_missing_policy_surfaces_as_OSError(tmp_path):
+    """A missing file is an I/O condition, not malformed input.
+
+    `tests/test_fail_closed.py` pins this deliberately: the suite's contract is that
+    MALFORMED input raises MeshError, so a caller can distinguish "not there" from
+    "malformed". My first version of the size bound wrapped OSError and broke that pin;
+    the clean room caught it on both interpreters. This test records the correct
+    behaviour beside the bound so the next edit cannot repeat the mistake.
+    """
+    from avm_mesh.trust import load_policy
+
+    with pytest.raises(OSError) as caught:
+        load_policy(str(tmp_path / "absent.json"))
+    assert not isinstance(caught.value, MeshError)
+
+
+def test_a_malformed_policy_names_the_file(tmp_path):
+    from avm_mesh.trust import load_policy
+
+    path = tmp_path / "policy.json"
+    path.write_text("{not json", encoding="utf-8")
+    with pytest.raises(MeshError, match="not valid UTF-8 JSON"):
+        load_policy(str(path))
+
+
+def test_a_non_utf8_receipt_is_not_called_a_JSON_error(tmp_path, capsys):
+    """A file that is not UTF-8 has no syntax to correct.
+
+    `UnicodeDecodeError` subclasses `ValueError`, so without its own clause it fell into the
+    JSON handler and told an operator to look for a syntax error in a file the decoder
+    rejected before the parser ever saw it.
+    """
+    receipt = tmp_path / "receipt.json"
+    receipt.write_bytes(b'{"x": "\xff\xfe not utf8"}')
+    evidence = tmp_path / "evidence"
+    evidence.mkdir()
+
+    code = cli.main(["verify", str(receipt), "--evidence", str(evidence)])
+    err = capsys.readouterr().err
+    assert code == 3
+    assert "not valid UTF-8" in err
+    assert "not valid JSON" not in err.replace("not valid UTF-8", "")

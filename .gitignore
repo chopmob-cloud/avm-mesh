@@ -5,3 +5,26 @@ __pycache__/
 build/
 dist/
 .venv/
+
+# Agent working notes: plans, handovers and session records are not
+# published documentation. They quote absolute paths and internal hosts.
+.hermes/
+
+# Agent tooling and session artefacts. These directories hold reviewer transcripts,
+# assistant-authored reports, cached credentials and absolute paths from this machine.
+# None of it is part of the library or its published documentation.
+.codex/
+.claude/
+claude/
+codex/
+.agent/
+.agents/
+
+# Root-scoped on purpose. A bare `HANDOVER*.md` glob applies at every depth and would
+# silently hide docs/HANDOVER.md, which is the standing blocker list linked from WHY.md
+# and POC-RUNBOOK.md. Published documents keep their names; working notes do not.
+/HANDOVER*.md
+/handover*.md
+/*CODEX*.md
+/*CLAUDE*.md
+/*.codex.md

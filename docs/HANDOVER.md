@@ -1,4 +1,4 @@
-# Handover — avm-mesh (as at 2026-10-31, `ac92eb0`)
+# Handover — avm-mesh (current state)
 
 Written for the next agent or reviewer picking this up cold. It states what is done, what is blocked,
 and who or what each blocked item waits on. Nothing here claims a capability that is not evidenced.
@@ -7,17 +7,16 @@ and who or what each blocked item waits on. Nothing here claims a capability tha
 
 | Fact | Value |
 |---|---|
-| Local path | `***REMOVED***` |
+| Local path | not published |
 | Remote | `github.com/chopmob-cloud/avm-mesh` (private) |
 | Branch | `main` @ `ac92eb0`, working tree clean, local equals origin |
 | Version | `0.8.0` (testnet bonding PoC), published to PyPI as wheel and sdist |
 | Python floor | `>=3.10`, executed in a container rather than asserted |
 | Runtime deps | `avm-proofpack>=0.4.1`, `avm-effectproof>=0.1.1` |
-| Sibling repos | `***REMOVED***`, `***REMOVED***`; proofpack fixtures live in the former |
+| Sibling repos | `avm-proofpack`, `avm-effectproof`; proofpack fixtures live in the former |
 
-Related artefacts outside the repo: handover and review documents in
-`***REMOVED***\` (`HANDOVER-CLAUDE-2026-10-31-review-round-2.md`,
-`HANDOVER-CODEX-2026-10-31.md`).
+Nothing needed to work on this repository lives outside it. The dependent packages are on
+PyPI and their sources are separate repositories.
 
 ## State of the gates
 
@@ -122,8 +121,8 @@ perform an independent review of my own dependencies.
 - **`bond.py` verifies nothing on chain** (see blocker 3).
 - **Rule D of the trust audit reports 189 advisories.** It measures whether refusal messages are pinned by
   `match=`; behaviour is covered by fail-closed tests. Chosen not to inflate the count.
-- **`origin/claude/vigilant-volta-3kjwyy`** is a divergent branch with no shared history, containing
-  nothing newer than `main`. Left in place; deleting it is the owner's call.
+- **Stale branches were removed before publication.** Every branch was recorded by SHA, then
+  deleted once it was confirmed merged or superseded. Only `main` remains on the remote.
 - **A superseded stash was dropped** on 2026-10-31; its two changes (genesis pin against the authenticated
   header, attested-interval binding) are already in `receipt.py` at HEAD.
 

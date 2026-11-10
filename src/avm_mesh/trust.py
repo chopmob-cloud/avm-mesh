@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import pathlib
 from dataclasses import dataclass, field
 from typing import Any
@@ -129,9 +130,20 @@ MAX_POLICY_BYTES = 256 * 1024
 def load_policy(path: str) -> TrustPolicy:
     """Read a policy document, refusing one larger than MAX_POLICY_BYTES.
 
-    Bounded before parse rather than after: the point is not to survive a large document,
-    it is to never build the string. Opened "rb" so a text-mode descriptor cannot stop at a
-    0x1A byte on Windows and hand back a truncated document that parses.
+    Bounded before parse rather than after: the document is measured on the descriptor it
+    will be read from, so a file over the cap is refused without ever being loaded. Note
+    that "never build the string" is true of the *raw bytes* and not of the decoded text —
+    decoding happens after the size check and does allocate, which is the point of checking
+    first.
+
+    One descriptor for both the measurement and the read. The earlier version called
+    `stat()` on the path and then `read_bytes()` on the path again, which is two opens: a
+    file swapped in between would be read without ever having been measured, and the
+    post-read check only catches growth. `fstat` on the same handle closes that window, and
+    the read is bounded by the descriptor's own size.
+
+    Opened "rb" so a text-mode descriptor cannot stop at a 0x1A byte on Windows and hand
+    back a truncated document that happens to parse.
     """
     target = pathlib.Path(path)
     # OSError is deliberately NOT wrapped. A missing or unreadable file is an I/O
@@ -139,14 +151,17 @@ def load_policy(path: str) -> TrustPolicy:
     # caller can tell "not there" from "malformed". The suite's contract is that
     # MALFORMED input raises MeshError -- not that every failure does. Wrapping this was
     # my change and it broke that pin, which the clean room caught on both interpreters.
-    size = target.stat().st_size
-    if size > MAX_POLICY_BYTES:
+    with open(target, "rb") as handle:
+        size = os.fstat(handle.fileno()).st_size
+        if size > MAX_POLICY_BYTES:
+            raise MeshError(
+                f"policy {path} is {size} bytes, over the {MAX_POLICY_BYTES} byte cap")
+        # Read one byte past the cap so a file that grew after fstat is still refused,
+        # and so the read can never exceed the bound it was checked against.
+        raw = handle.read(MAX_POLICY_BYTES + 1)
+    if len(raw) > MAX_POLICY_BYTES:
         raise MeshError(
-            f"policy {path} is {size} bytes, over the {MAX_POLICY_BYTES} byte cap")
-    raw = target.read_bytes()
-    if len(raw) > MAX_POLICY_BYTES:                 # grow between stat and read
-        raise MeshError(
-            f"policy {path} grew past the {MAX_POLICY_BYTES} byte cap while being read")
+            f"policy {path} is larger than the {MAX_POLICY_BYTES} byte cap")
     try:
         return TrustPolicy.from_dict(json.loads(raw.decode("utf-8-sig")))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:

@@ -1,4 +1,10 @@
-# Pre-publication audit — 2026-11-04
+# Pre-publication audit — 2026-11-04 (historical record)
+
+> **This document records the audit that was performed before the repository was made public. It is kept as
+> evidence of what was checked and when, not as current state.** The flip has since happened: the repository
+> is public at `github.com/chopmob-cloud/avm-mesh`, the branch deletions listed below were carried out, and
+> the history was rewritten to remove agent working notes and absolute paths from the authoring machine
+> before publication. For the current position see `docs/HANDOVER.md`.
 
 Supplements `docs/PUBLISH-READINESS.md` with the results of the pre-flight scan that document listed as the
 one outstanding item, plus repo-state findings.
@@ -101,5 +107,15 @@ Secret hygiene: **scanned twice, independently, over every object in the databas
 Repo state: **three cosmetic items** (topics, homepage, stale branches) and nothing blocking.
 Remaining gaps: **capability maturity, documented in-app**, not disclosure risk.
 
-The one irreversible act — changing visibility — is the maintainer's, and this document is what it should be
-taken on.
+The one irreversible act — changing visibility — was the maintainer's, and this document was what it was
+taken on. **It was authorised and carried out; the repository is public.**
+
+## What happened after this audit
+
+- The three cosmetic items were completed: topics, description and licence set; stale branches deleted.
+- The history was re-scanned at the final commit and then **rewritten** with `git-filter-repo`: agent
+  working notes under the tooling directories were expunged from every commit, and absolute paths from the
+  authoring machine were removed from historical versions of the handover document.
+- The repository was deleted and recreated so the pre-rewrite objects were never uploaded, then verified
+  from a fresh anonymous clone: no machine path, username, credential or server address in any reachable
+  object, and `gitleaks` clean.

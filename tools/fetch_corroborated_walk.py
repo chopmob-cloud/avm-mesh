@@ -140,7 +140,19 @@ def main(argv=None) -> int:
             print(f"--operator wants NAME=URL, got {spec!r}", file=sys.stderr)
             return 2
         name, url = spec.split("=", 1)
-        operators.append((name.strip(), url.strip()))
+        name, url = name.strip(), url.strip()
+        # These URLs go straight into urlopen. Without a scheme check a file:// URL is a
+        # local-file read, and nothing about "ask an operator" requires anything but HTTP.
+        if not url.startswith(("http://", "https://")):
+            print(f"refusing: --operator {name!r} is {url!r}; an operator endpoint must be "
+                  "http:// or https://", file=sys.stderr)
+            return 2
+        operators.append((name, url))
+    if args.hops < 1:
+        # A walk needs at least one interval to capture; `requested[0]` below assumes a
+        # non-empty list, and an IndexError is not how a usage error should present.
+        print(f"refusing: --hops must be at least 1, got {args.hops}", file=sys.stderr)
+        return 2
     if not operators:
         operators = list(OPERATORS)
     if len(operators) < 2:
@@ -160,7 +172,17 @@ def main(argv=None) -> int:
     # from the newest available boundary, so the proof is complete rather than in flight.
     head = min(heads.values())
     newest = (head // INTERVAL) * INTERVAL - INTERVAL
+    if newest < 0:
+        print(f"refusing: head {head} is below one state-proof interval ({INTERVAL}); "
+              "there is no completed interval to capture", file=sys.stderr)
+        return 2
     requested = [newest - INTERVAL * i for i in range(args.hops)][::-1]
+    if requested and requested[0] < 0:
+        # Clamp rather than refuse: asking for more hops than the chain has history for
+        # should capture what exists. Rounds below zero are dropped here; rounds the
+        # operators no longer retain are then dropped by the retention probe further down,
+        # which records them in `beyond_retention` rather than silently ignoring them.
+        requested = [r for r in requested if r >= 0]
 
     print(f"head (min across operators): {head}")
 
@@ -242,7 +264,18 @@ def main(argv=None) -> int:
 
         # The capture itself comes from the first operator that answered, and is checked
         # against every other operator's fingerprint of the same proof.
-        source = answering[0] if answering else operators[0][0]
+        if not answering:
+            # Nobody answered: attempting a capture from a default endpoint would fail
+            # noisily and record a misleading "source" the operators never agreed on.
+            print(f"  {round_number}: no operator answered; nothing captured", file=sys.stderr)
+            all_agreed = False
+            corroborations.append({
+                "round": round_number, "corroborated": False,
+                "operators_answering": [], "agreement": agreed_fields,
+                "responses": responses,
+            })
+            continue
+        source = answering[0]
         source_url = dict(operators)[source]
         try:
             # Reuse the response already fetched above rather than asking a second time.

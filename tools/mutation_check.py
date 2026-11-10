@@ -8,7 +8,9 @@ reader can see the guard is exercised rather than merely present.
     python tools/mutation_check.py            # all checks
     python tools/mutation_check.py cli.py     # only checks touching a path
 
-Exit codes: 0 every guard bit and was restored, 1 a guard did not bite, 2 could not run.
+Exit codes: 0 every guard bit and was restored, 1 a guard did not bite OR a mutation
+was skipped (a drifted anchor or a missing file counts as a failure, because a matrix
+that silently stops mutating is worse than one that fails).
 
 Nothing here is left mutated: each check restores the original bytes in a `finally`, and
 the script verifies the restore before moving on.

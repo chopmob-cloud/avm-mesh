@@ -134,17 +134,16 @@ def load_policy(path: str) -> TrustPolicy:
     0x1A byte on Windows and hand back a truncated document that parses.
     """
     target = pathlib.Path(path)
-    try:
-        size = target.stat().st_size
-    except OSError as exc:
-        raise MeshError(f"cannot read policy {path}: {exc}") from exc
+    # OSError is deliberately NOT wrapped. A missing or unreadable file is an I/O
+    # condition, and `tests/test_fail_closed.py` pins that it surfaces as OSError so a
+    # caller can tell "not there" from "malformed". The suite's contract is that
+    # MALFORMED input raises MeshError -- not that every failure does. Wrapping this was
+    # my change and it broke that pin, which the clean room caught on both interpreters.
+    size = target.stat().st_size
     if size > MAX_POLICY_BYTES:
         raise MeshError(
             f"policy {path} is {size} bytes, over the {MAX_POLICY_BYTES} byte cap")
-    try:
-        raw = target.read_bytes()
-    except OSError as exc:
-        raise MeshError(f"cannot read policy {path}: {exc}") from exc
+    raw = target.read_bytes()
     if len(raw) > MAX_POLICY_BYTES:                 # grow between stat and read
         raise MeshError(
             f"policy {path} grew past the {MAX_POLICY_BYTES} byte cap while being read")

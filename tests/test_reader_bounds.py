@@ -200,12 +200,20 @@ def test_a_policy_exactly_at_the_cap_is_attempted(tmp_path):
         load_policy(str(path))
 
 
-def test_a_missing_policy_is_a_MeshError_not_an_OSError(tmp_path):
-    """The library promises never to leak OSError to callers."""
+def test_a_missing_policy_surfaces_as_OSError(tmp_path):
+    """A missing file is an I/O condition, not malformed input.
+
+    `tests/test_fail_closed.py` pins this deliberately: the suite's contract is that
+    MALFORMED input raises MeshError, so a caller can distinguish "not there" from
+    "malformed". My first version of the size bound wrapped OSError and broke that pin;
+    the clean room caught it on both interpreters. This test records the correct
+    behaviour beside the bound so the next edit cannot repeat the mistake.
+    """
     from avm_mesh.trust import load_policy
 
-    with pytest.raises(MeshError, match="cannot read policy"):
+    with pytest.raises(OSError) as caught:
         load_policy(str(tmp_path / "absent.json"))
+    assert not isinstance(caught.value, MeshError)
 
 
 def test_a_malformed_policy_names_the_file(tmp_path):

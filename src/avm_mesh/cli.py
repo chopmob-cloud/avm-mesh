@@ -552,11 +552,16 @@ def main(argv: list[str] | None = None, *, signature_style: str = "raw") -> int:
         print(f"cannot read receipt: {exc}", file=sys.stderr)
         return 3
     except SizeRefused as exc:
-        # A size refusal and a malformed document are different problems, and calling both
-        # "not valid JSON" sent an operator hunting for a syntax error in a file that was
-        # refused without being parsed. Distinguished by TYPE, not by matching the message:
-        # a wording change must not be able to quietly undo this.
+        # A size refusal, an encoding failure and a malformed document are three different
+        # problems. Calling all of them "not valid JSON" sent an operator hunting for a
+        # syntax error in a file that was never parsed. Distinguished by TYPE, not by
+        # matching the message: a wording change cannot quietly undo this.
         print(f"receipt refused on size: {exc}", file=sys.stderr)
+        return 3
+    except UnicodeDecodeError as exc:
+        # `UnicodeDecodeError` is a `ValueError`, so without its own clause it inherits the
+        # JSON wording below. A file that is not UTF-8 has no syntax to correct.
+        print(f"receipt is not valid UTF-8: {exc}", file=sys.stderr)
         return 3
     except ValueError as exc:
         print(f"receipt is not valid JSON: {exc}", file=sys.stderr)

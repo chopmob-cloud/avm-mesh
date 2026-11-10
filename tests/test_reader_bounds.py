@@ -215,3 +215,22 @@ def test_a_malformed_policy_names_the_file(tmp_path):
     path.write_text("{not json", encoding="utf-8")
     with pytest.raises(MeshError, match="not valid UTF-8 JSON"):
         load_policy(str(path))
+
+
+def test_a_non_utf8_receipt_is_not_called_a_JSON_error(tmp_path, capsys):
+    """A file that is not UTF-8 has no syntax to correct.
+
+    `UnicodeDecodeError` subclasses `ValueError`, so without its own clause it fell into the
+    JSON handler and told an operator to look for a syntax error in a file the decoder
+    rejected before the parser ever saw it.
+    """
+    receipt = tmp_path / "receipt.json"
+    receipt.write_bytes(b'{"x": "\xff\xfe not utf8"}')
+    evidence = tmp_path / "evidence"
+    evidence.mkdir()
+
+    code = cli.main(["verify", str(receipt), "--evidence", str(evidence)])
+    err = capsys.readouterr().err
+    assert code == 3
+    assert "not valid UTF-8" in err
+    assert "not valid JSON" not in err.replace("not valid UTF-8", "")

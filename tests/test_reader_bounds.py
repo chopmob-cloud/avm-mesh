@@ -165,3 +165,53 @@ def test_a_bug_in_the_probe_is_not_reported_as_a_pruned_interval(tmp_path):
         assert module._probe("https://example.invalid", 66647808, 25.0) is False
     finally:
         module._get = original
+
+
+# ----------------------------------------------------------- the policy document
+
+
+def test_an_oversized_policy_is_refused_before_parsing(tmp_path):
+    """`load_policy` is public API and reads a file a counterparty may have chosen.
+
+    Bounded before parse, so the string is never built. Same defect class as the receipt
+    read that shipped unbounded until 0.13.1: the guard was written for the path someone
+    was thinking about, not for every path a stranger's file can arrive through.
+    """
+    from avm_mesh.trust import MAX_POLICY_BYTES, load_policy
+
+    path = tmp_path / "policy.json"
+    path.write_text('{"pad": "' + "x" * (MAX_POLICY_BYTES + 1) + '"}', encoding="utf-8")
+
+    with pytest.raises(MeshError, match="byte cap"):
+        load_policy(str(path))
+
+
+def test_a_policy_exactly_at_the_cap_is_attempted(tmp_path):
+    """The bound must not be an off-by-one that rejects the largest legal document."""
+    from avm_mesh.trust import MAX_POLICY_BYTES, load_policy
+
+    path = tmp_path / "policy.json"
+    body = "{}"
+    path.write_text(body + " " * (MAX_POLICY_BYTES - len(body)), encoding="utf-8")
+    assert path.stat().st_size == MAX_POLICY_BYTES
+
+    # It reaches the parser and fails there, which is a different error.
+    with pytest.raises(MeshError, match="not valid UTF-8 JSON|required|missing"):
+        load_policy(str(path))
+
+
+def test_a_missing_policy_is_a_MeshError_not_an_OSError(tmp_path):
+    """The library promises never to leak OSError to callers."""
+    from avm_mesh.trust import load_policy
+
+    with pytest.raises(MeshError, match="cannot read policy"):
+        load_policy(str(tmp_path / "absent.json"))
+
+
+def test_a_malformed_policy_names_the_file(tmp_path):
+    from avm_mesh.trust import load_policy
+
+    path = tmp_path / "policy.json"
+    path.write_text("{not json", encoding="utf-8")
+    with pytest.raises(MeshError, match="not valid UTF-8 JSON"):
+        load_policy(str(path))

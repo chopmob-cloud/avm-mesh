@@ -2,14 +2,13 @@
 
 ## The gap this closes
 
-Every settlement attestation in this ecosystem, including ours until now, rests on one
-endpoint's word. A walk can verify every interval from a pinned checkpoint to a target and
-still be worthless if a single operator served a consistent fiction — and the verification
-would pass, because nothing about a state proof says *who gave it to you*.
+A settlement attestation that rests on one endpoint's word is worth very little. A walk can verify
+every interval from a pinned checkpoint to a target and still be worthless if a single operator
+served a consistent fiction — and the verification would pass, because nothing about a state proof
+says *who gave it to you*.
 
-The repository used to admit this in a caveat on the walk: all captures came from one
-endpoint in one fetch, so chaining was proven and source independence was not. That is an
-honest limitation but not a useful one. `crossnode` is the answer.
+Captures taken from one endpoint in one fetch prove chaining and prove nothing about source
+independence. That is an honest limitation but not a useful one. `crossnode` is the answer.
 
 ## What it does
 

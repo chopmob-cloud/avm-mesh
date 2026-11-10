@@ -12,9 +12,9 @@ artifact_current   PARSED   parts=1 payload=['data']
 artifact_legacy    REJECTED Failed to parse parts field: Message type "lf.a2a.v1.Part" has no field named "kind"
 ```
 
-The second line is the defect fixed in 0.4.2: v1.0 removed the inline `kind` discriminator, so the form we
-used to emit is **not merely legacy — it is unparseable**. This is a negative control on the reference
-implementation, not on our own tests: the same code path accepts one form and refuses the other.
+The second line is the defect fixed in 0.4.2: v1.0 removed the inline `kind` discriminator, so that form is
+**not merely legacy — it is unparseable**. This is a negative control on the reference implementation, not on
+our own tests: the same code path accepts one form and refuses the other.
 
 Reproduce:
 

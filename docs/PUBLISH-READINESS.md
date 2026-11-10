@@ -22,10 +22,10 @@ Verdict: secret-safety gate is in good shape. Not a guarantee of absence — onl
 - `README.md` reads for a general audience (tone rewrite done in 0.8 cycle) and the docs directory covers A2A conformance, extension conformance vectors, the rails migration, operator run-sheet, and red-team mutation evidence.
 - `SECURITY.md` and `.github/CODEOWNERS` present.
 
-## 3. Build and test baseline — complete as of 0.10.2
+## 3. Build and test baseline
 
-- PyPI latest: 0.10.2 (wheel + sdist), verified installed from a fresh venv with `PYTHONPATH` cleared, `__file__` under site-packages, console script intact.
-- Clean-room (VM2, offline wheels, fresh `python:3.12-slim` / `python:3.10-slim`): **432 tests passed, 0 skipped, 3 deselected** (signed tests requiring `pqcrypto`), audit rule A OK, red team 14/14 attacks refused. 3.10: same.
+- PyPI latest: 0.13.3 (wheel + sdist), verified installed from a fresh venv with `PYTHONPATH` cleared, `__file__` under site-packages, console script intact.
+- Clean-room (VM2, offline wheels, fresh `python:3.12-slim` / `python:3.10-slim`): no skips permitted, audit rule A OK, red team attacks all refused. 3.10: same suite on the floor interpreter.
 - GitHub Actions CI (`tests (py3.10)`, `tests (py3.12)`, `artefacts (licence + metadata)`, `a2a TCK (jsonrpc, must)`) green on the latest main commit.
 - Conformance: 14/14 self-authored extension vectors run against both the library and a standalone verifier that imports nothing from this project, with agreement required. All five primitive guards mutation-tested to red.
 - All three remaining hardening suggestions from the static review are addressed or honestly scoped (`_file_resolver` race; reparse-point/hard-link/junction gaps documented in `SECURITY.md`).
@@ -40,14 +40,14 @@ These are capability-maturity gaps, not security defects. Publishing with them o
 4. **Crypto review of `avm-proofpack`.** Falcon and state-proof internals have never had independent external review. That repository is already public and is where the root of trust actually lives; reviewing it is a separate engagement.
 5. **Level 2 with a genuine operator signer.** Signing tests are optional (`pqcrypto` is test-only). Verification itself does run in the portable gate against real mainnet fixtures and is covered by the red team.
 
-## 5. Items to decide before flipping visibility
+## 5. Items that were decided before the visibility flip (completed)
 
 - [x] ~~Run an independent second scan~~ — **done**, see [`docs/PRE-PUBLICATION-AUDIT.md`](PRE-PUBLICATION-AUDIT.md). `gitleaks 8.21.2` over a fresh clone (92 non-merge commits, all refs) and over all 353 unique blobs: zero findings. `detect-secrets` over the same blobs: 114 high-entropy hits, every one classified as chain data or a test fixture.
-- [ ] Decide whether to publish at the current 0.10.2 version or wait for an external deliverable (a genuine rails receipt, say) so the first public source matches the first public capability claim.
-- [ ] Confirm commit author identity and history are acceptable as committed (`AlgoVoi <chopmob@gmail.com>`). Some early commits or handovers may contain personal notes.
-- [ ] Confirm PyPI project name `avm-mesh` stays free/owned (already published).
+- [x] ~~Decide whether to publish at 0.10.2 or wait~~ — published at 0.13.3, and the capability claims in the README were rewritten to match what is proven rather than deferred.
+- [x] ~~Confirm commit author identity and history are acceptable as committed~~ — the full history was re-scanned and rewritten before the flip: agent working notes expunged, absolute paths from the authoring machine removed, and no credentials, keys or server addresses present in any object. See §5a.
+- [x] ~~Confirm PyPI project name `avm-mesh` stays free/owned~~ — published and owned.
 - [x] ~~Final pass on `README.md`~~ — **every documented command was run against the published wheel**, not read. Both chains verify from PyPI (Algorand and Voi, output reproduced byte for byte). The audit found two real defects: the CLI could not read a gzipped proofpack, and a text-mode `os.open` truncated files at the first `0x1A` on Windows — the Voi fixture stopped at 100 of 110,773 bytes. Both fixed in 0.12.0. Community files added: `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, issue and PR templates.
-- [ ] Repo cosmetics: add topics (`algorand`, `voi`, `state-proofs`, `falcon`, `settlement`, `x402`, `a2a`), set a homepage, and delete the nine stale branches listed in the audit (including `claude/vigilant-volta-3kjwyy`, which would delete 13,288 lines if merged).
+- [x] ~~Repo cosmetics~~ — topics set (`algorand`, `voi`, `state-proofs`, `falcon`, `settlement`, `x402`, `a2a`, `post-quantum`, `receipts`, `python`), description and Apache-2.0 licence set, stale branches deleted, only `main` on the remote.
 
 ## Verdict
 

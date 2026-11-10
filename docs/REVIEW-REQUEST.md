@@ -1,4 +1,4 @@
-# Independent review request — avm-mesh 0.7.1 (`c0b25c8`)
+# Independent review request — avm-mesh 0.13.3
 
 > **Everything below the horizontal rule is historical** (0.4.2 at `9bfda93`, 226 tests). It is kept because
 > the findings and the addendum are still the record of what was reviewed and what closed. The current
@@ -6,19 +6,23 @@
 >
 > | Fact | Value |
 > |---|---|
-> | Version | `0.7.1`, live on PyPI as wheel and sdist |
-> | Reviewed commit | `c0b25c8` on `main` for 0.7.1; `0.8.0` adds the testnet PoC, see `CHANGELOG.md` and `docs/POC-RUNBOOK.md` |
+> | Version | `0.13.3`, live on PyPI as wheel and sdist; repository public at `github.com/chopmob-cloud/avm-mesh` |
+> | Current shape | Five subcommands: `verify`, `serve`, `corroborate`, `anchor`, `crossnode` |
 > | Python floor | 3.10, executed in a container rather than asserted |
 > | Runtime deps | `avm-proofpack>=0.4.1`, `avm-effectproof>=0.1.1` |
 >
 > ```sh
-> pip install avm-mesh==0.7.1 pytest
+> pip install avm-mesh==0.13.3 pytest
 >
-> python -m pytest tests -q -m 'not signer'           # 361 passed, 0 skipped
+> python -m pytest tests -q -m 'not signer'           # 549 passed, 0 skipped on Linux; 543 passed, 6 symlink skips on Windows
 > python tools/audit_trust_boundary.py                # rule A OK; B/C/D advisory
 > python tools/red_team.py --fixture <bundle>.json.gz # RED TEAM CLEAN
+> python tools/mutation_check.py                      # every guard must bite
 > ```
 >
+> Collection is 552 tests; three signer tests are deselected by `-m 'not signer'`, leaving 549 in the
+> portable gate. On Windows six symlink checks skip (543 passed), because that platform cannot create
+> symlinks without elevation; they run on Linux, which is why the clean room reports 549 with no skips.
 > Fixture: `avm-proofpack/tests/fixtures/stake_attested_algorand_66457600.json.gz`. Set
 > `AVM_PROOFPACK_TESTS` to a checkout's `tests/` directory and `AVM_MESH_REQUIRE_FIXTURE=1` so an absent
 > fixture fails rather than skips.
@@ -34,8 +38,12 @@
 > `pqcrypto==0.1.0`; `service.py` has size caps, a rate limit, a slowloris timeout, a 64-connection ceiling
 > and an SSRF guard.
 >
-> Current review focus and the unproven list are in `docs/OPERATOR-RUNSHEET.md` and `docs/A2A-CONFORMANCE.md`;
-> the short version: a genuine rails receipt, a second independent capture, and `avm_proofpack` internals.
+> Current review focus and the unproven list are in `docs/OPERATOR-RUNSHEET.md` and
+> `docs/INDEPENDENT-OPERATORS.md`; the short version: a genuine rails receipt, more operators captured
+> while their intervals are still retained, four economic decisions for on-chain bonding, and
+> `avm_proofpack` internals. Cross-operator corroboration (`crossnode`) landed in 0.13.0 and is the
+> strongest evidence in the project; `docs/INDEPENDENT-OPERATORS.md` states exactly what it does and does
+> not prove.
 
 ---
 

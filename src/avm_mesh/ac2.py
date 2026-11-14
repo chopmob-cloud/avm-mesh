@@ -109,12 +109,39 @@ def canonical_bytes(content: dict) -> bytes:
 
 
 def _b64d(value: object, field: str) -> bytes:
+    """Decode base64 OR base64url, strictly.
+
+    AC2's stack emits **base64url**: the reference implementation and the SDK both
+    use Node's ``.toString('base64url')``, and the spec's examples say
+    ``base64-encoded`` without pinning the alphabet. ``base64.b64decode(...,
+    validate=True)`` rejects ``-`` and ``_``, so a genuine AC2 signature would be
+    refused as "not valid base64" — a false negative that looks like a bad
+    artefact. Found by reading the reference implementation's encoder rather than
+    by testing my own decoder against my own encoder, which is exactly the seam a
+    round-trip test cannot see.
+
+    Both alphabets are accepted; padding is optional (base64url commonly omits
+    it). Anything else is still refused.
+    """
     if not isinstance(value, str) or not value:
         raise MeshError(f"ac2_consent.{field} must be a non-empty base64 string")
+    # Reject characters outside both alphabets explicitly, so a typo cannot be
+    # silently repaired by a permissive decoder.
+    allowed = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+                  "+/=_-")
+    if not set(value).issubset(allowed):
+        bad = sorted(set(value) - allowed)
+        raise MeshError(
+            f"ac2_consent.{field} contains characters outside base64/base64url: {bad}"
+        )
+    # Translate the url alphabet to the standard one, and restore any padding a
+    # base64url encoder dropped.
+    normalised = value.replace("-", "+").replace("_", "/")
+    normalised += "=" * (-len(normalised) % 4)
     try:
-        return base64.b64decode(value.encode("ascii"), validate=True)
+        return base64.b64decode(normalised.encode("ascii"), validate=True)
     except (binascii.Error, ValueError) as exc:
-        raise MeshError(f"ac2_consent.{field} is not valid base64") from exc
+        raise MeshError(f"ac2_consent.{field} is not valid base64: {exc}") from exc
 
 
 def consent_payload(settlement: dict) -> bytes:

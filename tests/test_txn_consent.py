@@ -187,3 +187,39 @@ def test_editing_the_block_breaks_the_content_hash():
     with pytest.raises(MeshError) as exc:
         verify_txn_consent(envelope, bundle, chain)
     assert "content hash mismatch" in str(exc.value)
+
+
+def test_the_preimage_carries_gen_and_a_gen_less_form_is_a_different_transaction():
+    """``gen`` is load-bearing, measured rather than assumed.
+
+    ``bytesForSigning.transaction`` in algokit-utils omits ``gen`` (the genesis id
+    string) while keeping ``gh`` (the hash), because the constructor path relies on
+    the node to fill it back in. A payload built that way is NOT the transaction the
+    chain committed to: dropping ``gen`` from a real Voi preimage changes the txid.
+    That is the same defect class as re-encoding the STIB's ``txn`` map, so it is
+    pinned here instead of left as a comment.
+    """
+    import hashlib
+
+    from avm_proofpack import mpack
+
+    bundle = _bundle("voi-proofpack-24213754.json.gz")
+    preimage = signing_preimage(bundle, "voimain-v1.0")
+    assert preimage[:2] == b"TX"
+
+    body = mpack.decode(preimage[2:])
+    assert "gen" in body, "the real preimage must carry the genesis id string"
+
+    def txid(raw: bytes) -> str:
+        digest = hashlib.new("sha512_256")
+        digest.update(raw)
+        return base64.b32encode(digest.digest()).decode().rstrip("=")
+
+    assert txid(preimage) == bundle["transaction"]["txid"]
+
+    without_gen = b"TX" + mpack.encode_canonical(
+        {k: v for k, v in body.items() if k != "gen"})
+    assert txid(without_gen) != bundle["transaction"]["txid"], (
+        "if dropping gen still reproduced the txid, gen would be optional and this "
+        "test's premise would be wrong"
+    )

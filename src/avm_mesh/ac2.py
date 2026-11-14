@@ -257,10 +257,17 @@ def _ed25519_verify(public_key: bytes, message: bytes, signature: bytes) -> bool
         Ed25519PublicKey.from_public_bytes(public_key).verify(signature, message)
         return True
     except InvalidSignature:
+        # A well-formed signature that does not verify. This is the ordinary
+        # "wrong signer" case.
         return False
     except Exception:
-        # A malformed key raises rather than returning False; either way it is
-        # not a valid approval.
+        # Unreachable with the inputs this module passes: verify_consent checks
+        # the key is exactly 32 bytes and the signature exactly 64 before calling
+        # here, and ``from_public_bytes`` accepts any 32 bytes while ``verify``
+        # raises InvalidSignature (not a parse error) for a wrong-length
+        # signature. Kept as a belt-and-braces boundary that answers the only
+        # question the caller asks; a malformed length is refused earlier with a
+        # specific message, which is where the diagnosis belongs.
         return False
 
 
@@ -319,6 +326,7 @@ def verify_consent(sealed: dict, *, expected_sender: bytes | None = None,
             "level": LEVEL_NONE,
             "reason": "no ac2_consent block in the sealed content",
             "did": None,
+            "sig_hint": None,
             "public_key_b64": None,
         }
 
@@ -369,17 +377,26 @@ def verify_consent(sealed: dict, *, expected_sender: bytes | None = None,
                 "expected_sender must be the 32-byte sender read from the STIB"
             )
         if bytes(expected_sender) != public_key:
+            # A 32-byte AVM address is EITHER an Ed25519 public key (a single-signature
+            # account) OR a hash of a program (a logic signature) or of a multisig
+            # preimage. Length cannot tell them apart, so a mismatch here has two
+            # very different meanings and the message must not conflate them.
             raise MeshError(
                 "the consent key is not the key that authorised this transaction: "
                 f"consent signed with {base64.b64encode(public_key).decode()}, "
-                f"transaction sender is {base64.b64encode(bytes(expected_sender)).decode()}"
+                f"transaction sender is {base64.b64encode(bytes(expected_sender)).decode()}. "
+                "NOTE: sender binding is only meaningful when the payer is a "
+                "single-signature account whose address IS its Ed25519 public key. "
+                "If the payer is a multisig or a logic-sig account, its address is a "
+                "hash and can never equal an Ed25519 key: such a payment cannot be "
+                "sender-bound by this check and must not be presented as if it were."
             )
         level = LEVEL_SENDER
         reason = (
-            "the consent key IS the authenticated transaction sender, so the "
-            "approval and the payment come from one key and cannot be swapped. "
-            "This still does not prove a hardware passkey was used (see "
-            "consent_present), only that the payer signed this settlement."
+            "the consent key IS the authenticated transaction sender, so the approval "
+            "and the payment come from one key and cannot be swapped. This still does "
+            "not prove a hardware passkey was used (see consent_present), only that "
+            "the payer signed this settlement."
         )
 
     return {
@@ -426,8 +443,18 @@ def consent_level(sealed: dict, report: object = None, *,
     """
     if expected_sender is None and bundle is not None:
         genesis = getattr(report, "genesis_id", None)
-        if genesis:
-            expected_sender = sender_from_bundle(bundle, genesis)
+        if not genesis:
+            # Silently continuing here would report a weaker level without saying
+            # why: the caller asked for sender binding implicitly by passing a
+            # bundle, and got consent-only. Refuse instead, so the degradation is
+            # never mistaken for the strong path.
+            raise MeshError(
+                "consent_level was given a bundle to derive the sender from, but the "
+                "verification report carries no genesis_id, so the sender is unknown. "
+                "Pass expected_sender explicitly or supply a report from "
+                "avm_proofpack.verify."
+            )
+        expected_sender = sender_from_bundle(bundle, genesis)
 
     out = verify_consent(sealed, expected_sender=expected_sender, require=require)
 

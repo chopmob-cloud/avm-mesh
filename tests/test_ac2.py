@@ -300,13 +300,75 @@ def test_canonical_encoder_agrees_with_the_sealed_module():
     (VOI_BUNDLE, "5ba9ffb8a97da8ea477a5c22e929bc89af954479ad306b003b09375c84a8fc57"),
 ])
 def test_fixtures_are_the_ones_this_suite_was_written_against(path, expected):
-    """Pin the captures by digest so a swapped fixture cannot go unnoticed.
-
-    A test that only asserts ``len(digest) == 64`` proves nothing; it is the
-    expected value that constrains the fixture.
-    """
+    """Pin the captures by digest so a swapped fixture cannot go unnoticed."""
     if not path.exists():
         pytest.skip(f"fixture absent at {path}")
     raw = path.read_bytes()
     uncompressed = gzip.decompress(raw) if path.suffix == ".gz" else raw
     assert hashlib.sha256(uncompressed).hexdigest() == expected
+
+
+# ---------------------------------------------- shapes a reviewer asked about
+
+def test_the_no_consent_result_carries_the_same_keys_as_a_present_one(algorand):
+    """A level-NONE result must be schema-identical, not a subset.
+
+    A caller reading ``out["sig_hint"]`` unconditionally should get None rather
+    than a KeyError, so the absent case cannot be mis-handled into a crash that
+    looks like an invalid consent.
+    """
+    bundle, report = algorand
+    settlement = _settlement_for(report)
+    envelope = sealed.seal({"version": 1, "settlement": settlement},
+                           bundle, "mem://bundle", trusted_voters=_anchor(bundle))
+    absent = ac2.verify_consent(envelope)
+
+    sk, pk = _keypair()
+    present_envelope, _ = _sealed_with_consent(settlement, bundle, "mem://bundle",
+                                               signer=sk, sender=pk)
+    present = ac2.verify_consent(present_envelope)
+
+    assert set(absent) == set(present), (set(absent) ^ set(present))
+    assert absent["sig_hint"] is None
+
+
+def test_a_bundle_without_a_genesis_id_is_refused_not_silently_downgraded(algorand):
+    """Passing a bundle implies 'bind to the sender'. Losing that must be loud.
+
+    Silently returning consent_present here would report a weaker level without
+    saying why, and the caller would read it as the strong path having been
+    attempted.
+    """
+    class ReportWithoutGenesis:
+        trust_root = "stake_attested"
+
+    bundle, report = algorand
+    settlement = _settlement_for(report)
+    sk, pk = _keypair()
+    envelope, _ = _sealed_with_consent(settlement, bundle, "mem://bundle",
+                                       signer=sk, sender=pk)
+
+    with pytest.raises(MeshError) as exc:
+        ac2.consent_level(envelope, ReportWithoutGenesis(), bundle=bundle)
+    assert "no genesis_id" in str(exc.value)
+
+
+def test_a_multisig_or_logic_sig_payer_is_named_in_the_refusal(algorand):
+    """A program address is a hash, not an Ed25519 key, and can never match.
+
+    Without this sentence an operator sees 'consent key is not the key that
+    authorised this transaction' and hunts a key-management bug that does not
+    exist: a logic-sig payer *cannot* satisfy sender binding by construction.
+    """
+    bundle, report = algorand
+    settlement = _settlement_for(report)
+    sk, pk = _keypair()
+    envelope, _ = _sealed_with_consent(settlement, bundle, "mem://bundle",
+                                       signer=sk, sender=pk)
+
+    program_address = bytes(range(32))  # a plausible-looking 32-byte AVM address
+    with pytest.raises(MeshError) as exc:
+        ac2.verify_consent(envelope, expected_sender=program_address)
+    message = str(exc.value)
+    assert "logic-sig" in message and "multisig" in message, message
+

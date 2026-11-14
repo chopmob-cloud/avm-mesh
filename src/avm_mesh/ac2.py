@@ -257,17 +257,15 @@ def _ed25519_verify(public_key: bytes, message: bytes, signature: bytes) -> bool
         Ed25519PublicKey.from_public_bytes(public_key).verify(signature, message)
         return True
     except InvalidSignature:
-        # A well-formed signature that does not verify. This is the ordinary
-        # "wrong signer" case.
+        # A well-formed signature that does not verify: the ordinary "wrong
+        # signer" case.
         return False
-    except Exception:
-        # Unreachable with the inputs this module passes: verify_consent checks
-        # the key is exactly 32 bytes and the signature exactly 64 before calling
-        # here, and ``from_public_bytes`` accepts any 32 bytes while ``verify``
-        # raises InvalidSignature (not a parse error) for a wrong-length
-        # signature. Kept as a belt-and-braces boundary that answers the only
-        # question the caller asks; a malformed length is refused earlier with a
-        # specific message, which is where the diagnosis belongs.
+    except ValueError as exc:
+        # Reachable only if a caller passes a key or signature of the wrong
+        # length without going through verify_consent (which checks both first).
+        # Answering False is right -- it is not a valid approval -- but raising
+        # would be wrong here, because this function's contract is a boolean and
+        # the length refusal belongs to the caller that owns the message.
         return False
 
 
@@ -440,6 +438,14 @@ def consent_level(sealed: dict, report: object = None, *,
     reason is extended to say so explicitly. Without that sentence a reader sees
     ``consensus_bound``-grade evidence beside a consent block and assumes the two
     were tied together when they were verified independently.
+
+    CONTRACT, deliberately strict: passing ``bundle`` means "derive the sender
+    from the authenticated transaction and bind to it". If the report cannot
+    supply a ``genesis_id`` the sender is unknown, and this raises rather than
+    returning the weaker ``consent_present``. A silent downgrade would answer a
+    question the caller did not ask, and report it at a level that reads as if the
+    binding had been attempted. Pass ``expected_sender`` explicitly if you have the
+    sender from another source, or omit ``bundle`` to ask for consent-only.
     """
     if expected_sender is None and bundle is not None:
         genesis = getattr(report, "genesis_id", None)
@@ -457,7 +463,6 @@ def consent_level(sealed: dict, report: object = None, *,
         expected_sender = sender_from_bundle(bundle, genesis)
 
     out = verify_consent(sealed, expected_sender=expected_sender, require=require)
-
     trust_root = getattr(report, "trust_root", None)
     if trust_root == "stake_attested":
         if out["level"] == LEVEL_SENDER:

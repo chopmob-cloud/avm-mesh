@@ -497,7 +497,7 @@ whichever dependency shape suits you.
 
 | Stage | Result |
 |---|---|
-| VM2 clean room (offline install from wheels only, `[ac2]` extra) | **564 tests, 0 skipped, 0 failed** |
+| VM2 clean room (offline install from wheels only, `[ac2]` extra) | **567 tests, 0 skipped, 0 failed** |
 | AC2 stage inside that gate (installed wheel) | **PASS on `mainnet-v1.0` and `voimain-v1.0`** |
 | Mutation: sender comparison disabled | 2 failed (both chains) — guard is load-bearing |
 | Mutation: payload-digest check disabled | 2 failed (replay, both chains) |

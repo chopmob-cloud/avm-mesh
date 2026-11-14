@@ -9,7 +9,7 @@ from .anchor import AnchorWalk, walk
 from .corroborate import Corroboration, collect
 from .attestation import ConsensusAttestation, attest, verify_attestation
 from .effects import verify_settlement_amount
-from . import a2a, poc, rails, produce, service, trust
+from . import a2a, ac2, poc, rails, produce, service, trust
 from .produce import produce as produce_receipt
 from .service import Store, WitnessInfo
 from .trust import TrustPolicy, load_policy, verify_with_policy

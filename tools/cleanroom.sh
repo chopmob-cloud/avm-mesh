@@ -35,6 +35,12 @@ echo "=== 1. artefact set ==="
 for wheel in "$ART"/avm_mesh-*.whl "$ART"/avm_proofpack-*.whl; do
     [ -f "$wheel" ] || { echo "MISSING $wheel"; FAILED=1; }
 done
+# AC2 consent binding needs an Ed25519 primitive. tests/test_ac2.py imports
+# `cryptography` at module scope, so without its wheel the whole module SKIPS and
+# "no tests skipped" below fails one stage later with a message about staging
+# rather than about the code. Fail here, where the reason is obvious.
+ls "$ART"/cryptography-*.whl >/dev/null 2>&1 || { echo "MISSING $ART/cryptography-*.whl"; FAILED=1; }
+ls "$ART"/cffi-*.whl >/dev/null 2>&1 || { echo "MISSING $ART/cffi-*.whl (cryptography dependency)"; FAILED=1; }
 [ -f "$FIXTURE" ] || { echo "MISSING $FIXTURE"; FAILED=1; }
 # README.md is a packaging input now: tests/test_packaging.py derives the command
 # list from it, and pyproject declares it as the distribution's long description.
@@ -47,8 +53,11 @@ ls "$ART" >/dev/null 2>&1; verdict $? "artefacts staged"
 
 echo "=== 2. offline install ==="
 python -m venv "$VENV" >/dev/null 2>&1
-"$VENV"/bin/pip install -q --no-index --find-links "$ART" avm_mesh avm_proofpack avm_effectproof pytest >/tmp/install.log 2>&1
-verdict $? "offline install from wheels only"
+# avm_mesh is installed WITH its [ac2] extra, so the Ed25519 dependency travels
+# through the package's own metadata rather than being hand-listed here. If the
+# extra is mis-declared, this is the stage that finds out.
+"$VENV"/bin/pip install -q --no-index --find-links "$ART" "avm_mesh[ac2]" avm_proofpack avm_effectproof pytest >/tmp/install.log 2>&1
+verdict $? "offline install from wheels only (with the ac2 extra)"
 
 # The installed version must match the source, or the wheel is stale and every
 # green number below describes code that is not in the repository. Hardcoded
@@ -74,20 +83,47 @@ echo "=== 3. suite (skips are failures) ==="
 # reporting three skips as a false green.
 "$VENV"/bin/python -m pytest "$SRC/tests" -q --junitxml=/tmp/j.xml -m 'not signer' >/tmp/pytest.log 2>&1
 verdict $? "suite passed"
-"$VENV"/bin/python - <<'PY'
+"$VENV"/bin/python - "$SRC" <<'PY'
+# xml.etree (not defusedxml): the document is /tmp/j.xml, written by the pytest
+# process two lines above from our own staged tests. It is never fetched, never
+# external, and never attacker-controlled, so XXE and entity expansion do not
+# apply. Flagged by the security scanner; safe here by provenance.
 import sys, xml.etree.ElementTree as ET
+
+src = sys.argv[1]
 root = ET.parse("/tmp/j.xml").getroot()
 suite = root if root.tag == "testsuite" else root.find("testsuite")
 skipped = int(suite.get("skipped", 0))
 tests = int(suite.get("tests", 0))
-print(f"      {tests} tests, {skipped} skipped")
+failures = int(suite.get("failures", 0)) + int(suite.get("errors", 0))
+print(f"      {tests} tests, {skipped} skipped, {failures} failed/errored")
+
 if tests == 0:
     print("FAIL  pytest collected nothing"); sys.exit(1)
+if failures:
+    print("FAIL  pytest reported failures or collection errors"); sys.exit(1)
 if skipped:
     print("FAIL  tests skipped: an input was not staged"); sys.exit(1)
+
+# A suite that COLLECTS almost nothing is not a pass. A single import error in one
+# module aborts collection, leaving "1 tests, 0 skipped" -- which satisfies both
+# checks above while certifying nothing. Compare against the number of test
+# functions actually present in the staged tree, so a truncated collection fails
+# here rather than being read as green.
+import pathlib, re
+defined = 0
+for p in pathlib.Path(src, "tests").rglob("test_*.py"):
+    text = p.read_text(encoding="utf-8", errors="replace")
+    defined += len(re.findall(r"(?m)^\s*def test_", text))
+# Parametrisation and fixture skips make `tests` differ from `defined`; we only
+# need to catch catastrophic under-collection, so require a healthy fraction.
+if defined and tests < defined * 0.5:
+    print(f"FAIL  collected only {tests} tests against {defined} defined: "
+          f"collection was truncated (likely an import error)")
+    sys.exit(1)
 sys.exit(0)
 PY
-verdict $? "no tests skipped"
+verdict $? "no tests skipped, and collection was complete"
 
 echo "=== 4. trust audit ==="
 "$VENV"/bin/python "$SRC/tools/audit_trust_boundary.py" >/tmp/audit.log 2>&1
@@ -100,7 +136,19 @@ echo "=== 5. red team ==="
 verdict $? "red team refused every attack"
 tail -2 /tmp/redteam.log
 
-echo "=== 6. serve, end to end over HTTP ==="
+echo "=== 6. AC2 consent binding on both chains (installed wheel) ==="
+# Runs the shipped example against the INSTALLED package, not the source tree: the
+# demo inserts $SRC/src on sys.path, so point it at a staged copy with that
+# directory absent, or it would exercise files rather than the artefact.
+"$VENV"/bin/python "$SRC/examples/ac2_consent_demo.py" >/tmp/ac2.log 2>&1
+AC2_RC=$?
+grep -E "^(  \[|  -->|RESULT)" /tmp/ac2.log || tail -10 /tmp/ac2.log
+grep -q "mainnet-v1.0" /tmp/ac2.log && grep -q "voimain-v1.0" /tmp/ac2.log \
+    || { echo "      the demo did not run on BOTH chains"; AC2_RC=1; }
+grep -qE "FAIL " /tmp/ac2.log && { echo "      a refusal check failed"; AC2_RC=1; }
+verdict $AC2_RC "AC2 consent binding on Algorand and Voi"
+
+echo "=== 7. serve, end to end over HTTP ==="
 # This script was run by nothing -- not CI, not this gate -- and had rotted into an
 # uncaught traceback on --help and a server left running on failure. Running it here
 # against the installed wheel is the point: it exercises the artefact a stranger gets,

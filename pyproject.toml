@@ -25,6 +25,12 @@ classifiers = [
 ]
 dependencies = ["avm-proofpack>=0.4.1", "avm-effectproof>=0.1.1"]
 
+[project.optional-dependencies]
+# Ed25519 verification for AC2 consent binding (``avm_mesh.ac2``). Optional
+# because only callers that check a consent block need it: importing
+# ``avm_mesh`` and verifying a plain receipt stay free of it.
+ac2 = ["cryptography>=42"]
+
 [project.scripts]
 avm-mesh = "avm_mesh.cli:main"
 

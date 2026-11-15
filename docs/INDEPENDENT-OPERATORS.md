@@ -63,19 +63,40 @@ round 66982144
 Exit codes: `0` corroborated, `2` refused (disagreement, too few answering, or one provider
 under two names), `3` refused as malformed input.
 
-## Corroboration has to happen at capture time
+## Corroboration has to happen at capture time — on Algorand
 
 This is the fact that shapes the design, and it was found by running it rather than
 reasoning about it. **Public Algorand endpoints retain only the three or four most recent
-state-proof intervals.** Measured against `mainnet-api.algonode.cloud` while writing this:
-one interval back was available, four back was pruned, and every interval older than that
-returned `500 ledger does not have entry`.
+state-proof intervals.** Measured against `mainnet-api.algonode.cloud`: one interval back
+was available, four back was pruned, and every interval older than that returned
+`500 ledger does not have entry`. Re-measured later, round `66982144` was available and then
+pruned within the same working session, and round `66647552` — the oldest interval in the
+shipped walk — now returns `500` permanently.
 
-So an old capture cannot be corroborated afterwards by anyone, no matter how many
-operators you ask. The tool that fetches a walk therefore corroborates as it captures:
+**This is not true of Voi.** Measured 2026-11-14 against `mainnet-api.voi.nodely.dev`:
+65,536 rounds back still answered, and the request returned the interval *asked for*
+(`FirstAttestedRound 24497153 / LastAttestedRound 24497408`), not a nearby one. The shipped
+Voi example, round `24213760`, was ~349,000 rounds (~11 days) behind head and still returned
+its exact interval.
+
+So the constraint is chain-specific:
+
+| Chain | Retention | Can corroboration be widened later? |
+|---|---|---|
+| Algorand | newest interval or two | **No** — capture at settlement time or never |
+| Voi | at least ~65,536 rounds (weeks) | **Yes**, within that window |
+
+An earlier revision of this document stated the Algorand figure for both chains, which made
+"an old capture cannot be corroborated afterwards by anyone" false for Voi. That mattered
+for the gateway integration: an Algorand settlement's proof must be captured within minutes,
+while a Voi one can be proved later.
+
+On Algorand, the tool that fetches a walk therefore corroborates as it captures:
 
 ```sh
-python tools/fetch_corroborated_walk.py --hops 3 --out examples/walk-mainnet-X
+python tools/fetch_corroborated_walk.py --hops 3 --out examples/walk-mainnet-X \
+  --operator nodely=https://mainnet-api.4160.nodely.dev \
+  --operator mine=https://your-node.example
 ```
 
 It probes which rounds are still retained, keeps the newest contiguous run, records the

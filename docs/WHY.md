@@ -90,10 +90,13 @@ not substitute for one of the dependency that decides whether a receipt is genui
 - 549 tests passing in the portable gate on Python 3.12 and 3.10, in fresh containers from an offline
   wheel install, with no skips permitted. (Collection is 552; three signer tests need an optional
   test-only dependency. On Windows six symlink checks skip, giving 543 there — the same suite.)
-- Cross-operator corroboration: `crossnode` requires several believed-distinct operators to agree on the
-  same attested interval, and a three-interval mainnet walk verifies with a derived proven weight matching
-  what both operators independently reported. What that does and does not prove is in
-  `docs/INDEPENDENT-OPERATORS.md`.
+- Cross-operator corroboration: `crossnode` requires several operators to agree on the same
+  attested interval, and refuses answers that look like one provider under two hostnames.
+  **The mainnet walk shipped in `examples/` was captured against two Nodely domains, so it is
+  evidence that two derivations agree, not that two organisations do** — the tool now refuses
+  that pair, and `provenance.json` says `NOT INDEPENDENT`. A genuinely corroborated capture set
+  needs a second operator that is not Nodely, and none is publicly available on either chain
+  today. What the mechanism does and does not prove is in `docs/INDEPENDENT-OPERATORS.md`.
 - 14 red-team attacks refused, positive control first.
 - Guards proven load-bearing by mutation: removing the guard turns a named test red, restoring it returns
   green. The list is in `docs/REVIEW-REQUEST.md`. The one known exception is the 64-connection ceiling,

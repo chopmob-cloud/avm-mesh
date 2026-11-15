@@ -24,6 +24,12 @@ promises to prevent.
   captures, and never reports corroboration.
 - **`provenance.json` for `examples/walk-mainnet-corroborated/` now says `NOT INDEPENDENT`**
   in its `independence` field, and records what the walk does and does not establish.
+- **Every capability claim that repeated the old assumption was corrected**, not just the
+  one document that framed it: `README.md` (its flagship `crossnode` example showed the
+  output of the one-provider pair and had to be replaced with the refusal),
+  `docs/WHY.md`, `docs/PUBLISH-READINESS.md` (which called this "the one claim no one else
+  in this space can make"), `docs/INDEPENDENT-OPERATORS.md` and `docs/HANDOVER.md`.
+  Exit codes and CLI behaviour were verified by running them, not read from the source.
 
 ### Corrected, not fixed, because the measurement was wrong
 

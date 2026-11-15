@@ -32,17 +32,17 @@ Five subcommands, all offline by default:
 
 ## State of the gates
 
-Collection is **552 tests**; three are signer tests excluded by `-m 'not signer'`, leaving **549** in
+Collection is **560 tests**; three are signer tests excluded by `-m 'not signer'`, leaving **557** in
 the portable gate.
 
-- **Portable gate on Linux (VM2 clean room, Python 3.12)**: `549 passed, 0 skipped`. No skips are
+- **Portable gate on Linux (VM2 clean room, Python 3.12)**: `557 passed, 0 skipped`. No skips are
   permitted — the clean room fails on a skipped test, on zero collected, on a missing wheel, on a fatal
   audit rule and on an accepted red-team attack. Audit rule A OK; every red-team attack refused;
   `CLEAN-ROOM GREEN`.
 - **Portable gate on Linux, Python 3.10**: the same suite on the floor interpreter.
-- **On Windows**: `543 passed, 6 skipped`. The six are symlink checks, which report themselves as such
+- **On Windows**: `551 passed, 6 skipped`. The six are symlink checks, which report themselves as such
   because the platform does not support symlinks without elevation. They run rather than skip on Linux,
-  which is why the clean room reports 549. Neither figure is a discrepancy; they are the same suite on
+  which is why the clean room reports 557. Neither figure is a discrepancy; they are the same suite on
   two environments.
 - **GitHub CI** on the public repository: `tests (py3.10)`, `tests (py3.12)`,
   `artefacts (licence + metadata)` and `a2a TCK (jsonrpc, must)` all success. The A2A job is a

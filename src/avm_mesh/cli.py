@@ -326,6 +326,10 @@ def _build_parser() -> argparse.ArgumentParser:
                    help="compare the answers even when they look like one provider "
                         "under several names. Reports agreement but never claims "
                         "corroboration; use only to re-analyse someone else's captures")
+    x.add_argument("--declared-independent", action="store_true",
+                   help="you run at least one of these endpoints yourself, so you know "
+                        "they are separate businesses even though this check cannot prove "
+                        "it. Recorded as 'asserted', never as measured evidence")
     x.add_argument("--timeout", type=float, default=25.0)
     x.add_argument("--json", action="store_true")
 
@@ -430,7 +434,8 @@ def _crossnode(args) -> int:
             results = corroborate_captures(args.bundles, operators=operators,
                                           min_operators=args.min_operators,
                                           timeout=args.timeout,
-                                          require_witness=not args.allow_same_operator)
+                                          require_witness=not args.allow_same_operator,
+                                          declared_independent=args.declared_independent)
             # A round named by both --round and the directory is checked once.
             covered = {r.round for r in results}
             wanted = [r for r in wanted if r not in covered]
@@ -440,7 +445,8 @@ def _crossnode(args) -> int:
             results.append(corroborate_round(round_number, operators=operators,
                                              min_operators=args.min_operators,
                                              timeout=args.timeout,
-                                             require_witness=not args.allow_same_operator))
+                                             require_witness=not args.allow_same_operator,
+                                             declared_independent=args.declared_independent))
         if not results:
             print("refused: give --round, --bundles, or both", file=sys.stderr)
             return 3
@@ -461,14 +467,20 @@ def _crossnode(args) -> int:
                 values = sorted({str(v) for v in detail["values"].values()})
                 shown = values[0] if len(values) == 1 else f"{len(values)} distinct values"
                 print(f"  {mark} {field_name}: {shown}")
-            if result.agreed:
-                print("  verdict: corroborated by distinct endpoints")
+            if result.corroborated:
+                print("  verdict: corroborated")
+                print(f"  independence: {result.independence_state}")
                 print(f"  caveat: {result.independence}")
             elif result.same_operator:
                 print(f"  verdict: NOT CORROBORATED -- {result.failure}")
+            elif result.agreed:
+                # Fields matched, but the independence claim is unsupported or was waived.
+                # Saying "corroborated" here is the false claim this version exists to fix.
+                print(f"  verdict: AGREEMENT ONLY, NOT CORROBORATED "
+                      f"({result.independence_state}) -- {result.failure}")
             else:
                 print(f"  verdict: REFUSED -- {result.failure}")
-    return 0 if all(r.agreed for r in results) else 2
+    return 0 if all(r.corroborated for r in results) else 2
 
 
 def main(argv: list[str] | None = None, *, signature_style: str = "raw") -> int:

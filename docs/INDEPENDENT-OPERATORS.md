@@ -56,7 +56,7 @@ round 66982144
   AGREE  voters_commitment: jfd9KRQn63mVC+NGawhIU+K6rHGnJFHx044W8pios/ASuUYSMtxPHnHgG27b1+6Rq/j+IstO6xSae2lGqbiJ4g==
   AGREE  ln_proven_weight: 2230109
   verdict: NOT CORROBORATED -- not corroborated: operators 'algonode' and 'nodely'
-           returned the same provider header (x-and-dl=0.05), so they are one provider
+           returned the same operator identity (x-and-nl=de_central), so they are one provider
            answering under two names
 ```
 
@@ -132,7 +132,7 @@ Being precise about this is the reason the mechanism is worth trusting.
 - **`algonode` and `nodely` are one operator, and the previous version of this document
   claimed otherwise.** Nodely's own documentation states that the old `algonode.cloud`
   hosts are "same rules, same infra as `nodely.dev`". Measured: both return byte-identical
-  state proofs *and* the same `x-and-nl` provider header (`de2@de_central`), so they are
+  state proofs *and* `x-and-nl` headers resolving to the same datacentre (`de_central`), so they are
   one business answering under two hostnames. An earlier revision said only that separate
   ownership "is not established here" — which understated the problem, because a reader
   took the two names as two witnesses. `crossnode` now refuses a pair like this, so the
@@ -163,7 +163,30 @@ separate:
 
 `avm-mesh crossnode` exits `2` with `not corroborated: …` when the answers look like one
 provider. Use `--allow-same-operator` only to re-analyse captures someone else made; it
-compares the fields and reports `agreed`, and never reports `corroborated`.
+compares the fields and reports `agreed`, and never reports `corroborated` — the JSON it
+emits carries `corroborated: false` and `independence_state: "waived"`.
+
+### When there is nothing to go on
+
+If no operator sends a fingerprint header, the check reports `independence_state: "unknown"`
+and `corroborated: false`, while still reporting that the fields agreed. That is not a
+refusal to work with self-run nodes — it is the opposite. **A node you run yourself is the
+case this cannot measure**, because it has no reason to carry Nodely's stamp, and claiming
+otherwise would mean trusting the absence of a header.
+
+Say so explicitly instead:
+
+```sh
+avm-mesh crossnode --round 66990848 \
+  --operator mine=https://my-node.example \
+  --operator nodely=https://mainnet-api.4160.nodely.dev \
+  --declared-independent
+```
+
+The result is `independence_state: "asserted"` and `corroborated: true`, with the recorded
+basis stating that independence rests on the caller's assertion rather than on a
+measurement. Asserted and evidenced are deliberately distinguishable — a reader comparing
+two captures can see which one rests on somebody's word.
 
 ## Adding an operator
 

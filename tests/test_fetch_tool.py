@@ -97,7 +97,11 @@ def test_the_newest_round_is_never_negative():
 def test_the_tool_refuses_when_head_is_below_one_interval(monkeypatch, tmp_path, capsys):
     """Exercised through main() with the node status stubbed, so no socket is opened."""
     m = _module()
-    monkeypatch.setattr(m, "_status", lambda endpoint: {"last-round": 200})
+    # `_get_with_fingerprint` is the status read now — it returns the body AND the provider
+    # headers, because the sameness check needs the headers. Stubbing it keeps this test
+    # socket-free, which was the point of the original stub of `_status`.
+    monkeypatch.setattr(m, "_get_with_fingerprint",
+                        lambda endpoint, path, timeout=25.0: ({"last-round": 200}, {}))
     code = m.main(["--operator", "a=http://a.invalid", "--operator", "b=http://b.invalid",
                    "--out", str(tmp_path / "out")])
     assert code == 2

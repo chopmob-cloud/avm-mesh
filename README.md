@@ -343,17 +343,41 @@ avm-mesh crossnode --round 66983936 \
 Naming Nodely's two hostnames — which is what this tool used to do silently — is now refused:
 
 ```
-round 66983936
-  AGREE  voters_commitment: jfd9KRQn63mVC+NGawhIU+K6rHGnJFHx044W8pios/ASuUYSMtxPHnHgG27b1+6Rq/j+IstO6xSae2lGqbiJ4g==
-  AGREE  ln_proven_weight: 2230109
-  AGREE  block_headers_commitment: TxPoAky6KPBRZEiBRKtTkNFQXQPXJYSAFWIZSLvtde8=
-  AGREE  state_proof_sha256: a9383e413be99b691040e394bfbc1d4d69762fa548274d271845e50f2636dcd1
-  verdict: NOT CORROBORATED -- operators 'algonode' and 'nodely' returned the same provider
-           header (x-and-dl=0.05), so they are one provider answering under two names
+round 66989568
+  operators answering: 2 of 2 (2 required)
+  AGREE  voters_commitment: puF+q1sCalYSlsLhB241C880uCf693x648LdDLnl/xGqxR3ldYyx9Jpyr7rfPNq9q+PxhTJmBkg2SSfiA9mPSA==
+  AGREE  ln_proven_weight: 2230310
+  AGREE  block_headers_commitment: /AmEdU8Clv/TekFe9x99SENSVvaCizqHtOfUUjnNp+Q=
+  AGREE  state_proof_sha256: d278abb5e0bfd9102ad1ba4a8c63bc277ad971faee62c08c25c403893fe4a5a6
+  verdict: NOT CORROBORATED -- not corroborated: operators 'nodely' and 'algonode' returned the same
+           provider header (x-and-nl=de_central), so they are one provider answering under two names
 ```
 
 The four fields agreeing is the point: they cannot agree by accident, and refusing them anyway is the
 correction. A `corroborated` field is what to trust; `agreed` only reports that the compared values matched.
+
+`corroborated` is True only when the independence claim is **supported**. There are two kinds of support,
+and the second is not a measurement:
+
+| `independence_state` | Meaning | `corroborated` |
+|---|---|---|
+| `evidenced` | every operator stamped itself and no two stamps collided | `true` |
+| `asserted` | you said you run one endpoint yourself (`--declared-independent`) | `true` |
+| `unknown` | at least one operator sent no fingerprint header | **`false`** |
+| `same_operator` | positive evidence of one provider | `false` |
+| `waived` | `--allow-same-operator` skipped the check | `false` |
+
+`unknown` is the row that matters. An earlier version treated a missing header as evidence of independence,
+so two Nodely hostnames on **Voi** — which send no fingerprint at all — came back `corroborated: true`,
+for a pair this repository's own `docs/SECOND-OPERATOR.md` calls one operator. Silence is not a
+measurement. When nothing identifies the operators, agreement is still reported (`agreed: true`) and the
+independence claim is withheld, with a `failure` string naming exactly which operators sent nothing.
+
+The identity compared is the **datacentre**, not the full header value. `x-and-nl` reads
+`<node>@<datacentre>`, and the node label is load-balanced — twelve requests to each hostname returned
+`de1@de_central` and `de2@de_central` in a 5:7 ratio, from the *same* endpoint. Two nodes in one datacentre
+are one operator, and comparing the raw value would have reported them as independent about a third of the
+time.
 
 Disagreement is a refusal, not a vote — two operators agreeing on a fiction and one telling the truth must
 fail, or a coordinated pair carries it. One operator down is also a refusal, not quiet agreement with itself.
@@ -603,19 +627,21 @@ independent. That is what the check above is for.
 
 ## Status
 
-**Version `0.13.4`** in the source tree; `pip install avm-mesh` currently installs
-`0.13.3`, which still ships the default operator pair described below as one provider.
-Until 0.13.4 is published, pass `--operator` explicitly.
+**Version `0.13.5`** in the source tree. `pip install avm-mesh` currently installs `0.13.4`,
+which fixed the default operator pair but compared a load-balanced node label when checking
+independence, so it accepts one provider as two about a third of the time. Install `0.13.5`
+when it is published; until then, pass `--operator` explicitly and read `corroborated`,
+never `agreed`.
 
-The portable test gate runs **557 tests with 0 skipped** on both Python 3.12 and Python 3.10.22 (an isolated
+The portable test gate runs **577 tests with 0 skipped** on both Python 3.12 and Python 3.10.22 (an isolated
 clean-room run: offline install from wheels only, plus the trust-boundary audit and the red-team suite), so
 `Requires-Python: >=3.10` is demonstrated rather than asserted.
 
-560 tests are collected in total. The portable gate deselects three test-only Falcon *signer* checks, which run
+580 tests are collected in total. The portable gate deselects three test-only Falcon *signer* checks, which run
 separately in a signer-enabled environment and pass with `pqcrypto` 0.1.0 — deliberately not a runtime
 dependency. With the fixtures provisioned this Windows host skips six, all of them symlink checks needing a
 platform that can create one (`test_anchor.py` twice, `test_cli_gzip.py`, `test_file_resolver.py` twice,
-`test_service.py`); they run rather than skip on the Linux clean room, which is how it reports 557 tests with
+`test_service.py`); they run rather than skip on the Linux clean room, which is how it reports 577 tests with
 0 skipped. CI runs the portable suite with the test fixture provisioned, and a missing fixture is treated as a
 failure, not a skip.
 

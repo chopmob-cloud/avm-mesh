@@ -106,8 +106,10 @@ show that either is telling the truth about the chain. Identical state proofs ar
 evidence of collusion — a state proof is deterministic, so honest independent nodes are
 expected to return the same bytes.
 
-**Who owns it**: an operator with a node. `docs/INDEPENDENT-OPERATORS.md` gives the collection
-and acceptance commands.
+**Who owns it**: an operator with a node. `docs/SECOND-OPERATOR.md` is the actionable
+version of this ask — what to run, what it costs, what it does and does not prove, and the
+measured constraint that there is no public Voi testnet to practise against.
+`docs/INDEPENDENT-OPERATORS.md` gives the collection and acceptance commands.
 
 ### 3. Four economic decisions (blocks on-chain bonding entirely)
 

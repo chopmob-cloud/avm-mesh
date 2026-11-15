@@ -18,6 +18,15 @@ community is a separate, gated step and has not happened.
 
 ## Bootstrap: the initial live platform (proof of concept / test validation)
 
+**Scope is Algorand testnet only, and that is a measured limitation rather than a choice.**
+`examples/testnet_poc_demo.py` runs against real Algorand testnet (`testnet-api.4160.nodely.dev`
+answers `200`). A Voi leg cannot run the same way today: there is no reachable public Voi
+testnet — Nodely's matrix advertises `testnet-api.voi.nodely.dev` and it is NXDOMAIN, while
+Voi's docs give the `voitest-v1` genesis hash but no live endpoint. A Voi testnet leg needs a
+self-run `voi-node`, which is the same machine `docs/SECOND-OPERATOR.md` Option A needs. So
+the two open items share one piece of setup, and the bootstrap should not be read as
+chain-agnostic until that node exists.
+
 Purpose, stated plainly: to have a live platform NOW for testing, validation and proof of
 concept. It exists to exercise the whole witness-bonding flow end to end, declare a bond,
 attest, corroborate, challenge, slash-or-remove, so operators and reviewers can see the

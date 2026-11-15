@@ -316,10 +316,16 @@ def _build_parser() -> argparse.ArgumentParser:
     x.add_argument("--bundles", metavar="DIR",
                    help="also corroborate every round present in this capture directory")
     x.add_argument("--operator", action="append", metavar="NAME=URL",
-                   help="an operator to ask; repeat. Defaults to two publicly distinct "
-                        "Algorand endpoints")
+                   help="an operator to ask; repeat. Required: there is no default, "
+                        "because the only two public endpoints that serve state proofs "
+                        "belong to one provider (Nodely and its legacy algonode.cloud "
+                        "hosts). Name operators you believe are genuinely separate.")
     x.add_argument("--min-operators", type=int, default=2,
                    help="operators that must ANSWER (default 2; 1 is refused as theatre)")
+    x.add_argument("--allow-same-operator", action="store_true",
+                   help="compare the answers even when they look like one provider "
+                        "under several names. Reports agreement but never claims "
+                        "corroboration; use only to re-analyse someone else's captures")
     x.add_argument("--timeout", type=float, default=25.0)
     x.add_argument("--json", action="store_true")
 
@@ -423,7 +429,8 @@ def _crossnode(args) -> int:
 
             results = corroborate_captures(args.bundles, operators=operators,
                                           min_operators=args.min_operators,
-                                          timeout=args.timeout)
+                                          timeout=args.timeout,
+                                          require_witness=not args.allow_same_operator)
             # A round named by both --round and the directory is checked once.
             covered = {r.round for r in results}
             wanted = [r for r in wanted if r not in covered]
@@ -432,7 +439,8 @@ def _crossnode(args) -> int:
         for round_number in wanted:
             results.append(corroborate_round(round_number, operators=operators,
                                              min_operators=args.min_operators,
-                                             timeout=args.timeout))
+                                             timeout=args.timeout,
+                                             require_witness=not args.allow_same_operator))
         if not results:
             print("refused: give --round, --bundles, or both", file=sys.stderr)
             return 3
@@ -456,6 +464,8 @@ def _crossnode(args) -> int:
             if result.agreed:
                 print("  verdict: corroborated by distinct endpoints")
                 print(f"  caveat: {result.independence}")
+            elif result.same_operator:
+                print(f"  verdict: NOT CORROBORATED -- {result.failure}")
             else:
                 print(f"  verdict: REFUSED -- {result.failure}")
     return 0 if all(r.agreed for r in results) else 2

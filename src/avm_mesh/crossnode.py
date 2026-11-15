@@ -41,10 +41,25 @@ AGREEMENT_FIELDS = ("voters_commitment", "ln_proven_weight", "block_headers_comm
 
 #: Operators believed to be organisationally distinct. Advertised list, not a guarantee:
 #: see `independence` in the report.
-DEFAULT_OPERATORS = (
-    ("algonode", "https://mainnet-api.algonode.cloud"),
-    ("nodely", "https://mainnet-api.4160.nodely.dev"),
-)
+#:
+#: EMPTY ON PURPOSE. The previous default was
+#: ``(("algonode", "https://mainnet-api.algonode.cloud"),
+#:    ("nodely", "https://mainnet-api.4160.nodely.dev"))``
+#: and those are one operator. Nodely's own documentation states that the old
+#: ``algonode.cloud`` hosts are "same rules, same infra as nodely.dev"; measured, both
+#: return byte-identical state proofs and the same ``x-and-nl`` datacentre header. A
+#: default that presents one provider twice as corroboration is worse than no default,
+#: because a reader takes "2 operators agree" at face value. Callers now have to name
+#: the operators they trust, and the check refuses two endpoints that behave alike.
+DEFAULT_OPERATORS: tuple[tuple[str, str], ...] = ()
+
+#: Headers that identify a provider rather than a server. Deliberately NARROW: only
+#: stable, operator-specific values belong here. ``server`` and ``via`` are excluded
+#: because two genuinely independent operators running nginx would otherwise be reported
+#: as one business, and ``x-request-id``/``cf-ray`` are unique per request so they can
+#: never match. ``x-and-nl`` and ``x-and-dl`` are Nodely's own stamps, which is exactly
+#: the identity this check needs.
+FINGERPRINT_HEADERS = ("x-and-nl", "x-and-dl")
 
 MAX_RESPONSE_BYTES = 8 * 1024 * 1024
 DEFAULT_TIMEOUT_S = 25.0
@@ -68,6 +83,10 @@ class OperatorResponse:
     block_headers_commitment: str | None = None
     state_proof_sha256: str | None = None
     error: str | None = None
+    #: Infrastructure fingerprint read from the response headers, used to detect one
+    #: provider answering under two hostnames. Not a security value: it is evidence for
+    #: the independence check, not something an attacker is prevented from spoofing.
+    fingerprint: dict[str, str] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -80,6 +99,7 @@ class OperatorResponse:
             "block_headers_commitment": self.block_headers_commitment,
             "state_proof_sha256": self.state_proof_sha256,
             "error": self.error,
+            "fingerprint": dict(self.fingerprint),
         }
 
 
@@ -92,6 +112,10 @@ class Corroboration:
     responders: list[OperatorResponse] = field(default_factory=list)
     agreement: dict[str, Any] = field(default_factory=dict)
     failure: str | None = None
+    #: True when the responses look like one provider under several hostnames, or when
+    #: they are byte-identical. In that case ``agreed`` may be True but nothing has been
+    #: corroborated: a provider cannot corroborate itself.
+    same_operator: bool = False
     independence: str = (
         "agreement across distinct endpoints, not proof of independent ownership; "
         "a shared upstream or hosting provider defeats this"
@@ -101,6 +125,8 @@ class Corroboration:
         return {
             "round": self.round,
             "agreed": self.agreed,
+            "corroborated": bool(self.agreed and not self.same_operator),
+            "same_operator_suspected": self.same_operator,
             "operators_contacted": len(self.responders),
             "operators_answered": sum(1 for r in self.responders if r.ok),
             "agreement": self.agreement,
@@ -114,20 +140,23 @@ class Corroboration:
 
 
 def _fetch_stateproof(endpoint: str, round_number: int, *,
-                      timeout: float = DEFAULT_TIMEOUT_S) -> dict[str, Any]:
+                      timeout: float = DEFAULT_TIMEOUT_S) -> tuple[dict[str, Any], dict[str, str]]:
     url = f"{endpoint.rstrip('/')}/v2/stateproofs/{round_number}"
     request = urllib.request.Request(url, headers={"accept": "application/json"})
     with urllib.request.urlopen(request, timeout=timeout) as response:
+        headers = {h.lower(): response.headers.get(h, "")
+                   for h in FINGERPRINT_HEADERS}
         raw = response.read(MAX_RESPONSE_BYTES + 1)
     if len(raw) > MAX_RESPONSE_BYTES:
         raise CorroborationError(f"{url} returned more than {MAX_RESPONSE_BYTES} bytes")
-    return json.loads(raw)
+    return json.loads(raw), {k: v for k, v in headers.items() if v}
 
 
 def _response(name: str, endpoint: str, round_number: int, *,
               timeout: float = DEFAULT_TIMEOUT_S) -> OperatorResponse:
+    fingerprint: dict[str, str] = {}
     try:
-        body = _fetch_stateproof(endpoint, round_number, timeout=timeout)
+        body, fingerprint = _fetch_stateproof(endpoint, round_number, timeout=timeout)
     except urllib.error.HTTPError as exc:
         # A pruned interval is a different fact from a broken operator, and the remedy
         # differs: nothing will make an old interval available on a node that has
@@ -186,19 +215,69 @@ def _response(name: str, endpoint: str, round_number: int, *,
         name=name, endpoint=endpoint, ok=True, last_attested_round=last,
         voters_commitment=voters, ln_proven_weight=ln,
         block_headers_commitment=headers, state_proof_sha256=digest,
+        fingerprint=dict(fingerprint),
     )
+
+
+def _independence_failure(answered: list[OperatorResponse]) -> str | None:
+    """Why these responses cannot corroborate each other, or None if they can.
+
+    One reliable signal, plus one that can only ever be suspicion:
+
+    * **A shared provider header.** ``x-and-nl``/``x-and-dl`` are Nodely's stamps, and
+      its legacy ``algonode.cloud`` hosts carry the same values as ``nodely.dev``. Two
+      endpoints sharing one is one provider however the hostnames differ. This is the
+      case that was actually shipped and it is decided here.
+    * **The same endpoint named twice.** One operator under two labels.
+
+    Deliberately NOT a signal: identical state proofs. A state proof is a deterministic
+    function of the interval's signing set, so two honest, fully independent nodes are
+    *expected* to return the same bytes — that agreement is the evidence, not a
+    contradiction. Treating identical proofs as collusion would invert the mechanism and
+    fail every correct answer.
+
+    This is heuristic by nature: a provider can strip headers and re-serve. The point is
+    that the ordinary case — one business, two domains — is caught, rather than being
+    presented to a reader as corroboration.
+    """
+    endpoints = [r.endpoint.rstrip("/").lower() for r in answered]
+    if len(set(endpoints)) != len(endpoints):
+        return ("the same endpoint was named more than once, which is not two operators")
+
+    seen: dict[str, str] = {}
+    for r in answered:
+        for header, value in r.fingerprint.items():
+            if header not in FINGERPRINT_HEADERS or not value:
+                continue
+            key = f"{header}={value}"
+            if key in seen:
+                return (
+                    f"operators {seen[key]!r} and {r.name!r} returned the same "
+                    f"provider header ({key}), so they are one provider answering "
+                    "under two names"
+                )
+            seen[key] = r.name
+    return None
 
 
 def corroborate_round(round_number: int, *,
                       operators: Iterable[tuple[str, str]] | None = None,
                       min_operators: int = 2,
-                      timeout: float = DEFAULT_TIMEOUT_S) -> Corroboration:
+                      timeout: float = DEFAULT_TIMEOUT_S,
+                      require_witness: bool = True) -> Corroboration:
     """Ask several operators about one attested interval and require agreement.
 
     ``min_operators`` is the number that must ANSWER, not the number configured. Two
     operators configured and one down is not corroboration, so this refuses rather than
     reporting agreement with itself — the failure mode that would make the whole
     mechanism theatre.
+
+    ``require_witness`` (default) also requires that the answers come from more than one
+    provider. Agreement between two hostnames owned by the same business is not
+    corroboration, and reporting it as such was this module's own defect: the shipped
+    default paired Nodely's current and legacy domains and called them two operators.
+    Set it False only when you want the agreement comparison alone, for example when
+    re-analysing captures someone else made.
     """
     if type(round_number) is not int or round_number <= 0:
         raise CorroborationError("round must be a positive integer")
@@ -212,6 +291,13 @@ def corroborate_round(round_number: int, *,
             "corroboration")
 
     chosen = list(operators if operators is not None else DEFAULT_OPERATORS)
+    if not chosen:
+        raise CorroborationError(
+            "no operators given. There is no safe default: the only two public Algorand "
+            "endpoints that serve state proofs are Nodely's current and legacy hostnames, "
+            "which are one provider. Name the operators you trust with --operator "
+            "NAME=URL, ideally one you run yourself."
+        )
     if len(chosen) < min_operators:
         raise CorroborationError(
             f"{len(chosen)} operator(s) configured but {min_operators} required")
@@ -270,12 +356,24 @@ def corroborate_round(round_number: int, *,
         result.failure = "operators served different state proofs for the same interval"
         return result
 
+    # Agreement is necessary but not sufficient: it has to come from more than one
+    # provider. Checking this AFTER the field comparison keeps the two refusals distinct —
+    # "they disagree" is a contradiction to investigate, "they agree because they are the
+    # same operator" is a claim that was never corroborated.
+    if require_witness:
+        conflict = _independence_failure(answered)
+        if conflict is not None:
+            result.same_operator = True
+            result.failure = f"not corroborated: {conflict}"
+            return result
+
     result.agreed = True
     return result
 
 
 def corroborate_captures(capture_dir, *, operators=None, min_operators: int = 2,
-                         timeout: float = DEFAULT_TIMEOUT_S) -> list[Corroboration]:
+                         timeout: float = DEFAULT_TIMEOUT_S,
+                         require_witness: bool = True) -> list[Corroboration]:
     """Corroborate every interval present in a capture directory.
 
     Reads the round from each filename, which the walk already requires to be the round
@@ -297,4 +395,5 @@ def corroborate_captures(capture_dir, *, operators=None, min_operators: int = 2,
         raise CorroborationError(f"no round-named captures in {root}")
 
     return [corroborate_round(r, operators=operators, min_operators=min_operators,
-                              timeout=timeout) for r in rounds]
+                              timeout=timeout, require_witness=require_witness)
+            for r in rounds]

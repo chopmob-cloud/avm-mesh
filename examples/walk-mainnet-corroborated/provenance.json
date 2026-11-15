@@ -78,7 +78,6 @@
   "corroboration": [
     {
       "round": 66647552,
-      "corroborated": true,
       "operators_answering": [
         "algonode",
         "nodely"
@@ -134,11 +133,14 @@
           },
           "state_proof_sha256": "80c74a7615ce1f1e049cb961e71260cb1293c93e28079eb70d414f4ba82cba0d"
         }
-      }
+      },
+      "fields_agreed": true,
+      "corroborated": false,
+      "same_operator_suspected": true,
+      "verdict": "NOT CORROBORATED: both endpoints belong to Nodely (same x-and-nl provider header). The compared fields agree, which is evidence the captures chain and that the anchor derives from the proofs alone -- not evidence that two organisations agree."
     },
     {
       "round": 66647808,
-      "corroborated": true,
       "operators_answering": [
         "algonode",
         "nodely"
@@ -194,11 +196,14 @@
           },
           "state_proof_sha256": "86905b0efa86ffedf7f5824e8b55d0d573dc24c9934f42d84166412fc5108b25"
         }
-      }
+      },
+      "fields_agreed": true,
+      "corroborated": false,
+      "same_operator_suspected": true,
+      "verdict": "NOT CORROBORATED: both endpoints belong to Nodely (same x-and-nl provider header). The compared fields agree, which is evidence the captures chain and that the anchor derives from the proofs alone -- not evidence that two organisations agree."
     },
     {
       "round": 66648064,
-      "corroborated": true,
       "operators_answering": [
         "algonode",
         "nodely"
@@ -254,11 +259,18 @@
           },
           "state_proof_sha256": "96982cc2e3ccfa3db11975aedccd97bf95212e280e70919cadea90b8971bf6d0"
         }
-      }
+      },
+      "fields_agreed": true,
+      "corroborated": false,
+      "same_operator_suspected": true,
+      "verdict": "NOT CORROBORATED: both endpoints belong to Nodely (same x-and-nl provider header). The compared fields agree, which is evidence the captures chain and that the anchor derives from the proofs alone -- not evidence that two organisations agree."
     }
   ],
-  "cross_operator_agreement": true,
-  "independence": "agreement across distinct endpoints, not proof of independent ownership; a shared upstream, hosting provider or operator running two domains defeats this, and a reader who knows the operators should say so",
-  "retention_note": "corroboration is only possible during capture: public endpoints retain three to four state-proof intervals, so an interval cannot be cross-checked after the fact by anyone",
-  "regenerate": "python tools/fetch_corroborated_walk.py --hops 4 --out examples/walk-mainnet-corroborated"
+  "cross_operator_agreement": false,
+  "independence": "NOT INDEPENDENT. Both 'operators' recorded here belong to Nodely: its documentation states the old algonode.cloud hosts are 'same rules, same infra as nodely.dev', and measured both return byte-identical state proofs and the same x-and-nl provider header (de2@de_central). This walk is therefore evidence that two hostnames agree and that the anchor derives from the proofs alone; it is NOT evidence of independent corroboration. crossnode now refuses a pair like this, so re-running this capture would report 'not corroborated'.",
+  "retention_note": "Retention is chain-specific. On Algorand public endpoints keep only the newest intervals -- these rounds (66647552+) now return '500 ledger does not have entry', so they can never be corroborated by anyone again. On Voi the same is not true: 65,536 rounds back still answers as measured 2026-11-14.",
+  "regenerate": "python tools/fetch_corroborated_walk.py --hops 4 --out examples/walk-mainnet-corroborated",
+  "captured_with_same_operator": true,
+  "fields_agreed_across_endpoints": true,
+  "corroborated": false
 }

@@ -72,6 +72,42 @@ CHECKS: list[tuple[str, str, str, str, str, str]] = [
         "tests/test_extension_vectors.py",
         "help_is_exact",
     ),
+    (
+        # The guard that stops "two operators agree" from meaning "one operator agreed
+        # with itself". This is the defect the whole 0.13.4 release exists to correct, so
+        # it is the one whose mutation evidence matters most.
+        "crossnode: same-operator refusal removed",
+        "src/avm_mesh/crossnode.py",
+        "        conflict = _independence_failure(answered)",
+        "        conflict = None  # MUTATED",
+        "tests/test_crossnode.py",
+        "two_domains_of_one_provider or never_calls_same_operator_corroborated",
+    ),
+    (
+        "crossnode: duplicate-endpoint refusal removed",
+        "src/avm_mesh/crossnode.py",
+        "    if len(set(endpoints)) != len(endpoints):",
+        "    if False:  # MUTATED",
+        "tests/test_crossnode.py",
+        "same_endpoint_twice",
+    ),
+    (
+        "crossnode: provider-header comparison removed",
+        "src/avm_mesh/crossnode.py",
+        "            if key in seen:",
+        "            if False:  # MUTATED",
+        "tests/test_crossnode.py",
+        "two_domains_of_one_provider",
+    ),
+    (
+        "crossnode: unsafe default operator pair restored",
+        "src/avm_mesh/crossnode.py",
+        "DEFAULT_OPERATORS: tuple[tuple[str, str], ...] = ()",
+        'DEFAULT_OPERATORS = (("algonode", "https://mainnet-api.algonode.cloud"),'
+        '\n                    ("nodely", "https://mainnet-api.4160.nodely.dev"))  # MUTATED',
+        "tests/test_crossnode.py",
+        "no_default_operator_list or refuses_with_a_reason",
+    ),
 ]
 
 def _run_tests(targets: list[str], selector: str) -> tuple[int, str]:

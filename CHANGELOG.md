@@ -1,5 +1,52 @@
 # Changelog
 
+## 0.13.4 — the two "operators" were one operator, and the tool now refuses that
+
+The claim that motivated this release was already in the repository: `crossnode` exists to
+prove a walk's provenance is "not one endpoint's word". Its own default paired
+`mainnet-api.algonode.cloud` with `mainnet-api.4160.nodely.dev`. Those are one business.
+Nodely's documentation says the old `algonode.cloud` hosts are *"same rules, same infra as
+`nodely.dev`"*, and measured, both return byte-identical state proofs and the same `x-and-nl`
+provider header. So for as long as this tool has shipped, its demonstration of independence
+has been a provider agreeing with itself — the exact failure the module's own docstring
+promises to prevent.
+
+### Fixed
+
+- **`corroborate_round` refuses a pair that looks like one provider.** Two responses sharing
+  a provider header (`x-and-nl`, `x-and-dl`), or naming the same endpoint twice, produce
+  `not corroborated: …` and set `same_operator`. A new `corroborated` field is what a reader
+  should trust; `agreed` now means only that the compared fields matched.
+- **The default operator list is empty.** A default that is one provider twice is worse than
+  no default, because a reader takes "2 operators agree" at face value. `crossnode` now
+  requires `--operator NAME=URL` and says why when it is missing.
+- **`--allow-same-operator`** compares the fields regardless, for re-analysing third-party
+  captures, and never reports corroboration.
+- **`provenance.json` for `examples/walk-mainnet-corroborated/` now says `NOT INDEPENDENT`**
+  in its `independence` field, and records what the walk does and does not establish.
+- **Every capability claim that repeated the old assumption was corrected**, not just the
+  one document that framed it: `README.md` (its flagship `crossnode` example showed the
+  output of the one-provider pair and had to be replaced with the refusal),
+  `docs/WHY.md`, `docs/PUBLISH-READINESS.md` (which called this "the one claim no one else
+  in this space can make"), `docs/INDEPENDENT-OPERATORS.md` and `docs/HANDOVER.md`.
+  Exit codes and CLI behaviour were verified by running them, not read from the source.
+
+### Corrected, not fixed, because the measurement was wrong
+
+- The retention window was stated for both chains from one Algorand measurement. It is real
+  on Algorand — `66647552` now returns `500 ledger does not have entry` — but **not on Voi**:
+  65,536 rounds back still answers, and the shipped Voi example (~349,000 rounds / ~11 days)
+  still returns its exact interval. Corroboration on Voi can be widened retrospectively; on
+  Algorand it cannot. `docs/HANDOVER.md` and `docs/INDEPENDENT-OPERATORS.md` now say so.
+
+### Not claimed
+
+Identical state proofs are not treated as evidence of collusion. A state proof is a
+deterministic function of the interval's signing set, so honest independent nodes are
+*expected* to return the same bytes. Detecting sameness uses provider headers and duplicate
+endpoints only; it is heuristic, and a provider that strips headers defeats it. What it
+catches is the ordinary case — one business, two domains — which is the case that shipped.
+
 ## 0.13.3 — the skip reasons in the README were wrong, and this corrects them
 
 0.13.2 said the six skipped tests were "four symlink checks and two that require the optional

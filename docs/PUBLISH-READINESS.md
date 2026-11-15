@@ -59,17 +59,27 @@ Capability maturity: **partially ready** — the receipt/verify/seal/anchor/rail
 
 What I will not do on my own: change repository visibility. That is a reversible-in-review-only decision that belongs to you, with the final scan in hand. Tell me to flip it, or to run the independent scan first, and I will be precise about which one I am doing.
 
-## The one claim no one else in this space can make
+## Cross-operator corroboration — what it is, and what it is not
 
-`0.13.0` ships cross-operator corroboration: a settlement anchor is no longer one endpoint's
-word. Two publicly distinct operators are asked for the same attested interval and must
-agree on the signing set, the proven weight, the block-headers commitment and the proof
-itself. Disagreement is a refusal, not a vote — a coordinated pair cannot outvote the truth.
+`0.13.0` shipped cross-operator corroboration: a settlement anchor is no longer one endpoint's
+word. Operators are asked for the same attested interval and must agree on the signing set,
+the proven weight, the block-headers commitment and the proof itself. Disagreement is a
+refusal, not a vote — a coordinated pair cannot outvote the truth.
 
-This is the strongest thing in the repository and it belongs in the first paragraph of the
-public README, not buried in a docs file. See `docs/INDEPENDENT-OPERATORS.md`.
+**This was claimed too strongly, and the claim has been corrected.** The two "publicly
+distinct operators" the mechanism shipped with were `algonode` and `nodely`, which are one
+business: Nodely's own documentation says the legacy `algonode.cloud` hosts are "same rules,
+same infra as `nodely.dev`". Measured, both return identical state proofs and the same
+provider header. So the shipped demonstration was a provider agreeing with itself, and
+`crossnode` now refuses that pair rather than reporting it as corroboration.
 
-Honest scope, which the docs state: distinct endpoints are not proven separate businesses,
-and two agreeing operators does not prove either is honest. What it does prove is that one
-alone cannot substitute a different signing set without the other contradicting it.
+The mechanism is still worth having, and it is the reason the correction was possible: it
+compares fields that cannot agree by accident and refuses rather than voting. But it has not
+yet been exercised against a second organisation, because no second public operator exists
+on Algorand or Voi for state proofs. Until one does — or until you run your own node and
+pass `--operator mine=https://your-node` — the honest statement is that the *mechanism* is
+built, tested and refuses self-agreement, and the *independence claim* is unproven.
+
+See `docs/INDEPENDENT-OPERATORS.md`. A reader should not go away from this repository
+believing a third party has corroborated anything yet.
 

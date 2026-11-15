@@ -60,7 +60,7 @@ The package installs one command-line tool, `avm-mesh`, with five subcommands:
 | `avm-mesh serve` | run a *witness* that serves receipts and evidence over a content-addressed store |
 | `avm-mesh anchor` | derive a trust anchor by walking state proofs forward from a checkpoint you pin |
 | `avm-mesh corroborate` | ask several witnesses for one receipt and check that they agree |
-| `avm-mesh crossnode` | ask unrelated **node operators** about one interval, so an anchor is not one endpoint's word |
+| `avm-mesh crossnode` | ask unrelated **node operators** about one interval, and refuse when the answers look like one provider |
 
 A *witness* and an *anchor* are both explained below. For now: a witness is simply something that serves
 evidence, and an anchor is the trusted starting point you supply yourself.
@@ -330,35 +330,52 @@ where it came from. `crossnode` closes that: fetch the same interval from operat
 and require their independent answers to agree on the signing set, the proven weight, the block-headers
 commitment and the proof itself.
 
+Operators must be named. There is no default, because the only two public Algorand endpoints that serve
+state proofs belong to one provider (Nodely and its legacy `algonode.cloud` hosts), and offering them as
+a pair would report a provider agreeing with itself.
+
 ```sh
-# pick a round within the last few intervals; they are pruned after that
-avm-mesh crossnode --round 66647808
+avm-mesh crossnode --round 66983936 \
+  --operator nodely=https://mainnet-api.4160.nodely.dev \
+  --operator mine=https://your-node.example
 ```
 
+Naming Nodely's two hostnames — which is what this tool used to do silently — is now refused:
+
 ```
-round 66647808
-  operators answering: 2 of 2 (2 required)
-  AGREE  voters_commitment: 00xqo/JW/ldbMWflfITg9UmhaD0/iib4xwXD8dsYYaROni9RWNcvaarkFYdhR7Q45xTTE/CDeRYpMM1M3j9cOg==
-  AGREE  ln_proven_weight: 2230295
-  AGREE  block_headers_commitment: saMg/HdZPJA/i1Z83FeBRYrGj05HuZOyR94aUHyp9L0=
-  AGREE  state_proof_sha256: 86905b0efa86ffedf7f5824e8b55d0d573dc24c9934f42d84166412fc5108b25
-  verdict: corroborated by distinct endpoints
+round 66983936
+  AGREE  voters_commitment: jfd9KRQn63mVC+NGawhIU+K6rHGnJFHx044W8pios/ASuUYSMtxPHnHgG27b1+6Rq/j+IstO6xSae2lGqbiJ4g==
+  AGREE  ln_proven_weight: 2230109
+  AGREE  block_headers_commitment: TxPoAky6KPBRZEiBRKtTkNFQXQPXJYSAFWIZSLvtde8=
+  AGREE  state_proof_sha256: a9383e413be99b691040e394bfbc1d4d69762fa548274d271845e50f2636dcd1
+  verdict: NOT CORROBORATED -- operators 'algonode' and 'nodely' returned the same provider
+           header (x-and-dl=0.05), so they are one provider answering under two names
 ```
+
+The four fields agreeing is the point: they cannot agree by accident, and refusing them anyway is the
+correction. A `corroborated` field is what to trust; `agreed` only reports that the compared values matched.
 
 Disagreement is a refusal, not a vote — two operators agreeing on a fiction and one telling the truth must
 fail, or a coordinated pair carries it. One operator down is also a refusal, not quiet agreement with itself.
 
-**This only works at capture time.** The round in the example above has an expiry date: public endpoints
-retain three or four state-proof intervals and prune everything older, so a specific round stops working
-within about ten minutes of being written here. Substitute a current one — `--round` must be a multiple of
-256 — or use the shipped captures, which were corroborated when they were taken. Either way, an old interval
-cannot be cross-checked afterwards by anyone. So the capture tool corroborates as it
-fetches, and `examples/walk-mainnet-corroborated/` holds three consecutive intervals captured that way. The
-walk then derives its anchor from the proofs alone, and that derived value equals what both operators
-reported for the same interval — two independent derivations landing on the same number.
+**This only works at capture time — on Algorand.** The round in the example above has an expiry date:
+public Algorand endpoints retain one or two state-proof intervals and prune everything older, so a specific
+round stops working within about ten minutes of being written here. Substitute a current one — `--round`
+must be a multiple of 256 — or use the shipped captures. Either way, an old Algorand interval cannot be
+cross-checked afterwards by anyone. **Voi is different:** measured 2026-11-14, 65,536 rounds back still
+answered, so a Voi capture can be corroborated later within that window.
 
-Honest limit: distinct endpoints are not proven separate businesses. `provenance.json` says so in the same
-words. See [`docs/INDEPENDENT-OPERATORS.md`](docs/INDEPENDENT-OPERATORS.md).
+So the capture tool corroborates as it fetches, and `examples/walk-mainnet-corroborated/` holds three
+consecutive intervals captured that way. The walk derives its anchor from the proofs alone, and that
+derived value equals what both endpoints reported for the same interval — two independent derivations
+landing on the same number.
+
+Honest limit, and it is now known rather than suspected: **both endpoints in that example belong to
+Nodely.** Its legacy `algonode.cloud` hosts are, per Nodely's own documentation, "same rules, same infra"
+as `nodely.dev`, and both stamp the same provider header. So the example proves the agreement machinery and
+the chained derivation; it does not prove two organisations agree, and `provenance.json` records
+`NOT INDEPENDENT`. `crossnode` refuses that pair today. See
+[`docs/INDEPENDENT-OPERATORS.md`](docs/INDEPENDENT-OPERATORS.md).
 
 **What this proves, exactly.** The Falcon signatures, reveal membership, signed weight and coin selection
 over that bundle are all verified, and you can re-verify them yourself. One caveat: the anchor in the
@@ -586,7 +603,9 @@ independent. That is what the check above is for.
 
 ## Status
 
-**Version `0.13.3`** — `pip install avm-mesh`.
+**Version `0.13.4`** in the source tree; `pip install avm-mesh` currently installs
+`0.13.3`, which still ships the default operator pair described below as one provider.
+Until 0.13.4 is published, pass `--operator` explicitly.
 
 The portable test gate runs **549 tests with 0 skipped** on both Python 3.12 and Python 3.10.22 (an isolated
 clean-room run: offline install from wheels only, plus the trust-boundary audit and the red-team suite), so
@@ -624,7 +643,7 @@ built wheels offline and runs against site-packages.
 | Service resource bounds (size cap, rate limit, slowloris timeout) | shipped 0.6.0 |
 | A2A settlement-evidence extension (v1.0 wire format) | shipped; parsed by `a2a-sdk` 1.3.0; TCK `must`/jsonrpc is a **required CI gate** (80 passed, 155 skipped as inapplicable at `--level must`, 0 failed) |
 | Rails adoption kit (`avm_mesh.rails`) | shipped; **not yet round-tripped** against a real rails receipt |
-| Corroborated walk captures (`examples/walk-mainnet-corroborated/`) | shipped 0.13.0 — three intervals, two operators agreeing, walk derived from the proofs alone |
+| Corroborated walk captures (`examples/walk-mainnet-corroborated/`) | shipped 0.13.0 — three intervals, walk derived from the proofs alone. **NOT independent corroboration:** both endpoints are Nodely's, so this is two hostnames of one provider agreeing. `provenance.json` records `NOT INDEPENDENT` and `crossnode` now refuses that pair |
 | Witness bonding (`bond.py`) | model only — **no on-chain escrow**, see Honest limits |
 
 **Dependency note:** `avm-proofpack>=0.4.1`, the version in which `stake_attested` became anchor-required.

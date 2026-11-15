@@ -586,7 +586,9 @@ independent. That is what the check above is for.
 
 ## Status
 
-**Version `0.13.3`** — `pip install avm-mesh`.
+**Version `0.13.4`** in the source tree; `pip install avm-mesh` currently installs
+`0.13.3`, which still ships the default operator pair described below as one provider.
+Until 0.13.4 is published, pass `--operator` explicitly.
 
 The portable test gate runs **549 tests with 0 skipped** on both Python 3.12 and Python 3.10.22 (an isolated
 clean-room run: offline install from wheels only, plus the trust-boundary audit and the red-team suite), so

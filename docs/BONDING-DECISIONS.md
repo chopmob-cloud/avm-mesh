@@ -27,6 +27,13 @@ not production economic security and does not claim to be.
 Bootstrap configuration:
 - Network: TESTNET only (Algorand testnet first; VOI testnet when an operator joins). No
   mainnet value is at risk at any point in the PoC.
+  **Caveat measured 2026-11-14: there is no reachable public Voi testnet.** Nodely's
+  endpoint matrix advertises `voitest-v1.0` hosts (`testnet-api.voi.nodely.dev`,
+  `testnet-idx.voi.nodely.dev`) and both are NXDOMAIN; Voi's own documentation gives the
+  `voitest-v1` genesis hash but no live public endpoint. A Voi testnet leg therefore needs a
+  self-run `voi-node` (`ghcr.io/voinetwork/voi-node`), not a URL. That is a real setup cost
+  and is stated here rather than discovered during the PoC. Algorand testnet is reachable
+  (`testnet-api.4160.nodely.dev` answers `200`).
 - Collateral: testnet ALGO/VOI, a nominal floor (the existing `MIN_BOND_MICROALGO = 1`
   ALGO placeholder is adequate for a PoC). Bonds are DECLARED, per current `bond.py`; the
   chain-verified escrow reader is the first thing built if the PoC validates and operators

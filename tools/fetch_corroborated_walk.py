@@ -41,12 +41,14 @@ from datetime import datetime, timezone
 
 INTERVAL = 256
 
-#: Operators believed to be organisationally distinct. Declared, not proven -- the report
-#: says so, and a reader who knows better can pass --operator to correct it.
-OPERATORS = (
-    ("algonode", "https://mainnet-api.algonode.cloud"),
-    ("nodely", "https://mainnet-api.4160.nodely.dev"),
-)
+#: NO DEFAULT OPERATORS. This was previously
+#: ``(("algonode", "https://mainnet-api.algonode.cloud"),
+#:    ("nodely", "https://mainnet-api.4160.nodely.dev"))``, and those are one business:
+#: Nodely documents the old ``algonode.cloud`` hosts as "same rules, same infra as
+#: ``nodely.dev``". A capture taken against that pair records agreement between one
+#: provider's two hostnames, which is not corroboration. Operators must be named, and the
+#: pair is checked for sameness before anything is captured.
+OPERATORS: tuple[tuple[str, str], ...] = ()
 
 #: The path a state proof is fetched on, and the shape of the response.
 FIELDS = ("VotersCommitment", "LnProvenWeight", "BlockHeadersCommitment")
@@ -148,6 +150,15 @@ def main(argv=None) -> int:
                   "http:// or https://", file=sys.stderr)
             return 2
         operators.append((name, url))
+    if not operators:
+        print(
+            "refusing: no operators given, and there is no safe default. The only two "
+            "public Algorand endpoints that serve state proofs are Nodely's current and "
+            "legacy hostnames, which are one provider, so 'corroborating' them would "
+            "record a provider agreeing with itself. Pass --operator NAME=URL for each "
+            "operator you believe is genuinely separate -- ideally one you run yourself.",
+            file=sys.stderr)
+        return 2
     if args.hops < 1:
         # A walk needs at least one interval to capture; `requested[0]` below assumes a
         # non-empty list, and an IndexError is not how a usage error should present.

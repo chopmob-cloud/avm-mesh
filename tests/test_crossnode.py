@@ -311,3 +311,125 @@ def test_a_non_ascii_state_proof_is_refused_rather_than_mangled(fake_algod):
     assert responses["bad"].ok is False
     assert "ASCII base64" in (responses["bad"].error or "")
     assert "only 1 of 2" in (result.failure or "")
+
+
+# --------------------------------------------------- same-operator detection
+#
+# The shipped default paired "algonode" with "nodely" and called them two operators.
+# They are one business: Nodely's documentation says the old algonode.cloud hosts are
+# "same rules, same infra as nodely.dev", and both stamp the same x-and-nl header. A
+# reader took "2 operators agree" at face value, so agreement between one provider's
+# two domains was the module's most consequential false claim. These tests pin the
+# refusal, and — just as important — pin that it does not refuse honest pairs.
+
+PROVIDER_HEADER = "x-and-nl"
+
+
+class _StampedHandler(_Handler):
+    """A fake algod that stamps a provider header, as Nodely does on every response."""
+
+    stamp = ""
+
+    def do_GET(self):  # noqa: N802 - http.server API
+        body = _payload(voters=self.voters, headers=self.headers_commitment, ln=self.ln,
+                        proof=self.proof)
+        self.send_response(200)
+        self.send_header("content-type", "application/json")
+        if self.stamp:
+            self.send_header(PROVIDER_HEADER, self.stamp)
+        self.send_header("content-length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+
+@pytest.fixture
+def stamped_algod():
+    servers = []
+
+    def make(**overrides):
+        handler = type("S", (_StampedHandler,), overrides)
+        server = HTTPServer(("127.0.0.1", 0), handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        servers.append(server)
+        return f"http://127.0.0.1:{server.server_address[1]}"
+
+    yield make
+    for server in servers:
+        server.shutdown()
+        server.server_close()
+
+
+def test_two_domains_of_one_provider_are_not_corroboration(stamped_algod):
+    """The exact defect: same agreement, same header, one operator."""
+    a = stamped_algod(stamp="de2@de_central")
+    b = stamped_algod(stamp="de2@de_central")
+    result = corroborate_round(66647808, operators=[("algonode", a), ("nodely", b)])
+
+    assert result.agreed is False, "one provider under two names was reported as corroborated"
+    assert result.same_operator is True
+    assert "same provider header" in (result.failure or "")
+    # The fields DID agree — that is why this was invisible before.
+    for field_name in ("voters_commitment", "ln_proven_weight", "block_headers_commitment"):
+        assert result.agreement[field_name]["agreed"] is True
+
+
+def test_the_report_never_calls_same_operator_corroborated(stamped_algod):
+    """`agreed` and `corroborated` must not be the same field."""
+    a = stamped_algod(stamp="de2@de_central")
+    b = stamped_algod(stamp="de2@de_central")
+    report = corroborate_round(
+        66647808, operators=[("a", a), ("b", b)]).to_dict()
+    assert report["agreed"] is False
+    assert report["corroborated"] is False
+    assert report["same_operator_suspected"] is True
+    assert f"{PROVIDER_HEADER}=de2@de_central" in report["failure"]
+
+
+def test_different_provider_headers_still_corroborate(stamped_algod):
+    """Two genuinely different providers must pass. This is the false-positive guard."""
+    a = stamped_algod(stamp="de2@de_central")
+    b = stamped_algod(stamp="us1@us_east")
+    result = corroborate_round(66647808, operators=[("a", a), ("b", b)])
+    assert result.agreed is True, result.failure
+    assert result.same_operator is False
+
+
+def test_an_unstamped_operator_is_not_accused(fake_algod, stamped_algod):
+    """A node that sends no provider header cannot be accused by this check."""
+    plain = fake_algod()
+    stamped = stamped_algod(stamp="de2@de_central")
+    result = corroborate_round(66647808, operators=[("self", plain), ("nodely", stamped)])
+    assert result.agreed is True, result.failure
+
+
+def test_the_same_endpoint_twice_is_not_two_operators(fake_algod):
+    a = fake_algod()
+    result = corroborate_round(66647808, operators=[("one", a), ("also-one", a)])
+    assert result.agreed is False
+    assert result.same_operator is True
+    assert "same endpoint was named more than once" in (result.failure or "")
+
+
+def test_allow_same_operator_reports_agreement_without_the_claim(fake_algod):
+    """Re-analysis mode: compare fields, but never assert corroboration."""
+    a = fake_algod()
+    b = fake_algod()
+    result = corroborate_round(66647808, operators=[("a", a), ("b", b)],
+                               require_witness=False)
+    assert result.agreed is True
+    assert result.same_operator is False
+
+
+def test_there_is_no_default_operator_list():
+    """A default that is one provider twice is worse than none."""
+    from avm_mesh.crossnode import DEFAULT_OPERATORS
+
+    assert DEFAULT_OPERATORS == ()
+
+
+def test_corroborate_with_no_operators_refuses_with_a_reason():
+    with pytest.raises(CorroborationError) as excinfo:
+        corroborate_round(66647808)
+    message = str(excinfo.value)
+    assert "no operators given" in message
+    assert "--operator" in message

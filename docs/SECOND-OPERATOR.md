@@ -45,7 +45,7 @@ avm-mesh crossnode --round <current multiple of 256> \
 ```
 
 Expected: four `AGREE` lines and `verdict: corroborated by distinct endpoints`, **not** a
-`NOT CORROBORATED` line. If your node carries the same `x-and-nl`/`x-and-dl` headers as
+`NOT CORROBORATED` line. If your node's `x-and-nl` names the same datacentre as
 Nodely — because it is behind a Nodely-fronted proxy, for instance — the check will treat it
 as the same provider. That is intended: it is measuring what a reader would measure.
 

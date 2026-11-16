@@ -329,6 +329,10 @@ class _StampedHandler(_Handler):
     """A fake algod that stamps a provider header, as Nodely does on every response."""
 
     stamp = ""
+    #: Also send the rate header both Nodely hostnames emit. It is NOT an identity — the
+    #: module deliberately ignores it — so this exists to prove the refusal does not
+    #: depend on it, and a test sets it to "" to show the datacentre comparison stands alone.
+    rate_header = "0.05"
 
     def do_GET(self):  # noqa: N802 - http.server API
         body = _payload(voters=self.voters, headers=self.headers_commitment, ln=self.ln,
@@ -337,6 +341,8 @@ class _StampedHandler(_Handler):
         self.send_header("content-type", "application/json")
         if self.stamp:
             self.send_header(PROVIDER_HEADER, self.stamp)
+        if self.rate_header:
+            self.send_header("x-and-dl", self.rate_header)
         self.send_header("content-length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -382,7 +388,10 @@ def test_the_report_never_calls_same_operator_corroborated(stamped_algod):
     assert report["agreed"] is False
     assert report["corroborated"] is False
     assert report["same_operator_suspected"] is True
-    assert f"{PROVIDER_HEADER}=de2@de_central" in report["failure"]
+    # The message names the DATACENTRE, not the load-balanced node label: the node differs
+    # per request, so quoting it would report which machine answered rather than which
+    # operator owns it.
+    assert f"{PROVIDER_HEADER}=de_central" in report["failure"]
 
 
 def test_different_provider_headers_still_corroborate(stamped_algod):
@@ -392,6 +401,47 @@ def test_different_provider_headers_still_corroborate(stamped_algod):
     result = corroborate_round(66647808, operators=[("a", a), ("b", b)])
     assert result.agreed is True, result.failure
     assert result.same_operator is False
+
+
+def test_two_nodes_of_one_datacentre_are_one_operator(stamped_algod):
+    """The x-and-nl node label is LOAD-BALANCED, so comparing it raw is a coin flip.
+
+    Measured against the live endpoints, twelve requests to each of
+    `mainnet-api.4160.nodely.dev` and `mainnet-api.algonode.cloud` returned
+    `de1@de_central` and `de2@de_central` in a 5:7 ratio — from the SAME endpoint. So two
+    requests to one provider disagree on the raw value about a third of the time, and the
+    pair was then reported as independent corroboration.
+
+    `de1@de_central` and `de2@de_central` are two machines in one datacentre; the operator
+    owns the datacentre, not the machine, so this is one provider and must be refused.
+
+    This is the regression test for the defect found by verifying the PUBLISHED 0.13.4
+    from the index: the live CLI appeared to work only because `x-and-dl: 0.05` matched on
+    every run, and `0.05` is a rate value, not an identity.
+    """
+    a = stamped_algod(stamp="de1@de_central")
+    b = stamped_algod(stamp="de2@de_central")
+    result = corroborate_round(66647808, operators=[("a", a), ("b", b)])
+    assert result.agreed is False, (
+        "two nodes of one datacentre must not corroborate each other; the node label is "
+        "load-balanced and comparing it raw accepts one provider as two"
+    )
+    assert result.same_operator is True
+    assert "de_central" in (result.failure or "")
+
+
+def test_a_load_balanced_pair_is_refused_even_with_no_rate_header(stamped_algod):
+    """The refusal must not depend on x-and-dl, which is a rate value and may be absent.
+
+    Verification of the published wheel showed the refusal firing only because
+    `x-and-dl: 0.05` happened to match. A provider that stops sending that header would
+    become two operators again unless the datacentre comparison stands on its own.
+    """
+    a = stamped_algod(stamp="de1@de_central", rate_header=None)
+    b = stamped_algod(stamp="de2@de_central", rate_header=None)
+    result = corroborate_round(66647808, operators=[("a", a), ("b", b)])
+    assert result.agreed is False
+    assert result.same_operator is True
 
 
 def test_an_unstamped_operator_is_not_accused(fake_algod, stamped_algod):

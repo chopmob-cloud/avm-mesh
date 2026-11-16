@@ -1,5 +1,5 @@
 {
-  "tool": "tools/fetch_corroborated_walk.py",
+  "tool": "tools/fetch_corroborated_walk.py (captured before 0.13.5; HAND-CORRECTED since)",
   "chain": "algorand-mainnet",
   "interval": 256,
   "captured_at_utc": "2026-11-05T00:12:15+00:00",
@@ -269,8 +269,20 @@
   "cross_operator_agreement": false,
   "independence": "NOT INDEPENDENT. Both 'operators' recorded here belong to Nodely: its documentation states the old algonode.cloud hosts are 'same rules, same infra as nodely.dev', and measured both return byte-identical state proofs and the same x-and-nl provider header (de2@de_central). This walk is therefore evidence that two hostnames agree and that the anchor derives from the proofs alone; it is NOT evidence of independent corroboration. crossnode now refuses a pair like this, so re-running this capture would report 'not corroborated'.",
   "retention_note": "Retention is chain-specific. On Algorand public endpoints keep only the newest intervals -- these rounds (66647552+) now return '500 ledger does not have entry', so they can never be corroborated by anyone again. On Voi the same is not true: 65,536 rounds back still answers as measured 2026-11-14.",
-  "regenerate": "python tools/fetch_corroborated_walk.py --hops 4 --out examples/walk-mainnet-corroborated",
+  "regenerate": null,
   "captured_with_same_operator": true,
   "fields_agreed_across_endpoints": true,
-  "corroborated": false
+  "corroborated": false,
+  "generated_by_tool": false,
+  "hand_edited_fields": [
+    "corroborated",
+    "fields_agreed_across_endpoints",
+    "captured_with_same_operator",
+    "independence",
+    "corroboration[].fields_agreed",
+    "corroboration[].same_operator_suspected",
+    "corroboration[].verdict"
+  ],
+  "regenerate_note": "NOT reproducible as recorded. Two reasons, both measured: (1) 0.13.5's capture tool refuses this operator pair before capturing anything, because both hostnames belong to Nodely \u2014 re-running it now exits 2 with 'one provider under two names'; (2) the rounds themselves are pruned on Algorand, so the state proofs no longer exist to re-fetch. The captures below are retained as evidence that two hostnames agree and that the anchor derives from the proofs alone. They are NOT evidence of independent corroboration, which is what the corrected fields say.",
+  "honesty_note": "This directory was published with fields its named tool cannot produce, and with a regenerate command that no longer runs. Both are corrected here rather than left for a reader to discover. The substantive claim \u2014 that these two endpoints are one operator \u2014 was always accurate and is now enforced by the code."
 }

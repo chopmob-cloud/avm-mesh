@@ -32,17 +32,17 @@ Five subcommands, all offline by default:
 
 ## State of the gates
 
-Collection is **560 tests**; three are signer tests excluded by `-m 'not signer'`, leaving **557** in
+Collection is **580 tests**; three are signer tests excluded by `-m 'not signer'`, leaving **577** in
 the portable gate.
 
-- **Portable gate on Linux (VM2 clean room, Python 3.12)**: `557 passed, 0 skipped`. No skips are
+- **Portable gate on Linux (VM2 clean room, Python 3.12)**: `577 passed, 0 skipped`. No skips are
   permitted — the clean room fails on a skipped test, on zero collected, on a missing wheel, on a fatal
   audit rule and on an accepted red-team attack. Audit rule A OK; every red-team attack refused;
   `CLEAN-ROOM GREEN`.
 - **Portable gate on Linux, Python 3.10**: the same suite on the floor interpreter.
-- **On Windows**: `551 passed, 6 skipped`. The six are symlink checks, which report themselves as such
+- **On Windows**: `571 passed, 6 skipped`. The six are symlink checks, which report themselves as such
   because the platform does not support symlinks without elevation. They run rather than skip on Linux,
-  which is why the clean room reports 557. Neither figure is a discrepancy; they are the same suite on
+  which is why the clean room reports 577. Neither figure is a discrepancy; they are the same suite on
   two environments.
 - **GitHub CI** on the public repository: `tests (py3.10)`, `tests (py3.12)`,
   `artefacts (licence + metadata)` and `a2a TCK (jsonrpc, must)` all success. The A2A job is a
@@ -81,7 +81,7 @@ truth. One operator answering is also a refusal, and `--min-operators 1` is refu
 
 **The default pair was one operator.** The previous build defaulted to `algonode` +
 `nodely`, and those are one business: Nodely's documentation says the old `algonode.cloud`
-hosts are "same rules, same infra as `nodely.dev`", and both stamp the same `x-and-nl`
+hosts are "same rules, same infra as `nodely.dev`", and both stamp an `x-and-nl` header
 header. So `examples/walk-mainnet-corroborated/` is evidence that two hostnames agree, not
 that two organisations do. `crossnode` now refuses a pair that shares a provider header or
 names one endpoint twice, the default list is empty, and `--allow-same-operator` exists only

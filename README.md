@@ -627,21 +627,21 @@ independent. That is what the check above is for.
 
 ## Status
 
-**Version `0.13.5`** in the source tree. `pip install avm-mesh` currently installs `0.13.4`,
-which fixed the default operator pair but compared a load-balanced node label when checking
-independence, so it accepts one provider as two about a third of the time. Install `0.13.5`
-when it is published; until then, pass `--operator` explicitly and read `corroborated`,
-never `agreed`.
+**Version `0.13.5`**, published to PyPI as wheel and sdist. It supersedes `0.13.4`, which compared a
+load-balanced node label when checking independence and so accepted one provider under two hostnames as
+independent -- Voi's two public hostnames send no fingerprint header at all, and 0.13.4 reported that
+pair as corroborated. 0.13.5 answers with `independence_state` and refuses the claim; `--declared-independent`
+records a self-run node as an assertion rather than a measurement. Read `corroborated`, never `agreed`.
 
-The portable test gate runs **577 tests with 0 skipped** on both Python 3.12 and Python 3.10.22 (an isolated
+The portable test gate runs **580 tests with 0 skipped** on both Python 3.12 and Python 3.10.22 (an isolated
 clean-room run: offline install from wheels only, plus the trust-boundary audit and the red-team suite), so
 `Requires-Python: >=3.10` is demonstrated rather than asserted.
 
-580 tests are collected in total. The portable gate deselects three test-only Falcon *signer* checks, which run
+583 tests are collected in total. The portable gate deselects three test-only Falcon *signer* checks, which run
 separately in a signer-enabled environment and pass with `pqcrypto` 0.1.0 — deliberately not a runtime
 dependency. With the fixtures provisioned this Windows host skips six, all of them symlink checks needing a
 platform that can create one (`test_anchor.py` twice, `test_cli_gzip.py`, `test_file_resolver.py` twice,
-`test_service.py`); they run rather than skip on the Linux clean room, which is how it reports 577 tests with
+`test_service.py`); they run rather than skip on the Linux clean room, which is how it reports 580 tests with
 0 skipped. CI runs the portable suite with the test fixture provisioned, and a missing fixture is treated as a
 failure, not a skip.
 

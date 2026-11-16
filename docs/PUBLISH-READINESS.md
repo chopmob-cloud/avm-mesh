@@ -24,7 +24,7 @@ Verdict: secret-safety gate is in good shape. Not a guarantee of absence — onl
 
 ## 3. Build and test baseline
 
-- PyPI latest: 0.13.3 (wheel + sdist), verified installed from a fresh venv with `PYTHONPATH` cleared, `__file__` under site-packages, console script intact.
+- PyPI latest: 0.13.4 (wheel + sdist), verified installed from a fresh venv with `PYTHONPATH` cleared, `__file__` under site-packages, console script intact.
 - Clean-room (VM2, offline wheels, fresh `python:3.12-slim` / `python:3.10-slim`): no skips permitted, audit rule A OK, red team attacks all refused. 3.10: same suite on the floor interpreter.
 - GitHub Actions CI (`tests (py3.10)`, `tests (py3.12)`, `artefacts (licence + metadata)`, `a2a TCK (jsonrpc, must)`) green on the latest main commit.
 - Conformance: 14/14 self-authored extension vectors run against both the library and a standalone verifier that imports nothing from this project, with agreement required. All five primitive guards mutation-tested to red.

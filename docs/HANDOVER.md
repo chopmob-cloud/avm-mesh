@@ -10,7 +10,7 @@ not evidenced.
 |---|---|
 | Remote | `github.com/chopmob-cloud/avm-mesh` — **public**, Apache-2.0 |
 | Branch | `main`, working tree clean, local equals origin |
-| Version | `0.13.4` in the source tree; `0.13.3` is what is live on PyPI (wheel and sdist). 0.13.4 is not published yet and the README says so. |
+| Version | `0.13.5` in the source tree; `0.13.4` is what is live on PyPI (wheel and sdist). 0.13.5 is not published yet and the README says so. |
 | Python floor | `>=3.10`, executed in a container rather than asserted |
 | Runtime deps | `avm-proofpack>=0.4.1`, `avm-effectproof>=0.1.1` |
 | Install | `pip install avm-mesh`; console script `avm-mesh` |
@@ -150,7 +150,7 @@ an independent review of one's own dependency cannot be self-performed.
 
 ## Things that look like blockers and are not
 
-- **PyPI publication**: done. `0.13.3` is live, installed from the index in a fresh virtual
+- **PyPI publication**: done. `0.13.4` is live, installed from the index in a fresh virtual
   environment with `PYTHONPATH` cleared, console script exercised.
 - **Licence and metadata**: done. `LICENSE` and `NOTICE` in repository, wheel and sdist; PEP 639
   `License-Expression`; no contradicting classifier; verified inside the published wheel.
@@ -188,7 +188,7 @@ decision rather than an omission, for the reason given under blocker 3.
 
 ```sh
 # portable suite
-pip install avm-mesh==0.13.3 pytest   # 0.13.3 is the published version; 0.13.4 needs `pip install .` from this tree
+pip install avm-mesh==0.13.4 pytest   # 0.13.4 is the published version; 0.13.5 needs `pip install .` from this tree
 AVM_PROOFPACK_TESTS=<avm-proofpack-checkout>/tests AVM_MESH_REQUIRE_FIXTURE=1 \
   python -m pytest tests -q -m 'not signer'
 

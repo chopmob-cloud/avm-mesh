@@ -86,7 +86,7 @@ not substitute for one of the dependency that decides whether a receipt is genui
 
 ## What is proven today
 
-- `0.13.3` on PyPI, wheel and sdist, licence and metadata verified inside the published artefact.
+- `0.13.4` on PyPI, wheel and sdist, licence and metadata verified inside the published artefact.
 - 577 tests passing in the portable gate on Python 3.12 and 3.10, in fresh containers from an offline
   wheel install, with no skips permitted. (Collection is 580; three signer tests need an optional
   test-only dependency. On Windows six symlink checks skip, giving 571 there — the same suite.)

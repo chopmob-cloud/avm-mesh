@@ -10,7 +10,7 @@ not evidenced.
 |---|---|
 | Remote | `github.com/chopmob-cloud/avm-mesh` — **public**, Apache-2.0 |
 | Branch | `main`, working tree clean, local equals origin |
-| Version | `0.13.5` in the source tree; `0.13.4` is what is live on PyPI (wheel and sdist). 0.13.5 is not published yet and the README says so. |
+| Version | `0.13.5` in the source tree and live on PyPI (wheel and sdist); `0.13.4` is superseded and left in place rather than yanked. |
 | Python floor | `>=3.10`, executed in a container rather than asserted |
 | Runtime deps | `avm-proofpack>=0.4.1`, `avm-effectproof>=0.1.1` |
 | Install | `pip install avm-mesh`; console script `avm-mesh` |
@@ -32,17 +32,17 @@ Five subcommands, all offline by default:
 
 ## State of the gates
 
-Collection is **580 tests**; three are signer tests excluded by `-m 'not signer'`, leaving **577** in
+Collection is **583 tests**; three are signer tests excluded by `-m 'not signer'`, leaving **580** in
 the portable gate.
 
-- **Portable gate on Linux (VM2 clean room, Python 3.12)**: `577 passed, 0 skipped`. No skips are
+- **Portable gate on Linux (VM2 clean room, Python 3.12)**: `580 passed, 0 skipped`. No skips are
   permitted — the clean room fails on a skipped test, on zero collected, on a missing wheel, on a fatal
   audit rule and on an accepted red-team attack. Audit rule A OK; every red-team attack refused;
   `CLEAN-ROOM GREEN`.
 - **Portable gate on Linux, Python 3.10**: the same suite on the floor interpreter.
-- **On Windows**: `571 passed, 6 skipped`. The six are symlink checks, which report themselves as such
+- **On Windows**: `574 passed, 6 skipped`. The six are symlink checks, which report themselves as such
   because the platform does not support symlinks without elevation. They run rather than skip on Linux,
-  which is why the clean room reports 577. Neither figure is a discrepancy; they are the same suite on
+  which is why the clean room reports 580. Neither figure is a discrepancy; they are the same suite on
   two environments.
 - **GitHub CI** on the public repository: `tests (py3.10)`, `tests (py3.12)`,
   `artefacts (licence + metadata)` and `a2a TCK (jsonrpc, must)` all success. The A2A job is a
@@ -150,7 +150,7 @@ an independent review of one's own dependency cannot be self-performed.
 
 ## Things that look like blockers and are not
 
-- **PyPI publication**: done. `0.13.4` is live, installed from the index in a fresh virtual
+- **PyPI publication**: done. `0.13.5` is live, installed from the index in a fresh virtual
   environment with `PYTHONPATH` cleared, console script exercised.
 - **Licence and metadata**: done. `LICENSE` and `NOTICE` in repository, wheel and sdist; PEP 639
   `License-Expression`; no contradicting classifier; verified inside the published wheel.
@@ -188,7 +188,7 @@ decision rather than an omission, for the reason given under blocker 3.
 
 ```sh
 # portable suite
-pip install avm-mesh==0.13.4 pytest   # 0.13.4 is the published version; 0.13.5 needs `pip install .` from this tree
+pip install avm-mesh==0.13.5 pytest   # 0.13.5 is the published version
 AVM_PROOFPACK_TESTS=<avm-proofpack-checkout>/tests AVM_MESH_REQUIRE_FIXTURE=1 \
   python -m pytest tests -q -m 'not signer'
 

@@ -86,10 +86,10 @@ not substitute for one of the dependency that decides whether a receipt is genui
 
 ## What is proven today
 
-- `0.13.4` on PyPI, wheel and sdist, licence and metadata verified inside the published artefact.
-- 577 tests passing in the portable gate on Python 3.12 and 3.10, in fresh containers from an offline
-  wheel install, with no skips permitted. (Collection is 580; three signer tests need an optional
-  test-only dependency. On Windows six symlink checks skip, giving 571 there — the same suite.)
+- `0.13.5` on PyPI, wheel and sdist, licence and metadata verified inside the published artefact.
+- 580 tests passing in the portable gate on Python 3.12 and 3.10, in fresh containers from an offline
+  wheel install, with no skips permitted. (Collection is 583; three signer tests need an optional
+  test-only dependency. On Windows six symlink checks skip, giving 574 there — the same suite.)
 - Cross-operator corroboration: `crossnode` requires several operators to agree on the same
   attested interval, and refuses answers that look like one provider under two hostnames.
   **The mainnet walk shipped in `examples/` was captured against two Nodely domains, so it is

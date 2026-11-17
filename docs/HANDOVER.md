@@ -10,7 +10,7 @@ not evidenced.
 |---|---|
 | Remote | `github.com/chopmob-cloud/avm-mesh` — **public**, Apache-2.0 |
 | Branch | `main`, working tree clean, local equals origin |
-| Version | `0.13.3` on PyPI, wheel and sdist |
+| Version | `0.13.6` in the source tree and live on PyPI (wheel and sdist); `0.13.5` is the same code with a stale description, left in place rather than yanked. |
 | Python floor | `>=3.10`, executed in a container rather than asserted |
 | Runtime deps | `avm-proofpack>=0.4.1`, `avm-effectproof>=0.1.1` |
 | Install | `pip install avm-mesh`; console script `avm-mesh` |
@@ -32,17 +32,17 @@ Five subcommands, all offline by default:
 
 ## State of the gates
 
-Collection is **552 tests**; three are signer tests excluded by `-m 'not signer'`, leaving **549** in
+Collection is **583 tests**; three are signer tests excluded by `-m 'not signer'`, leaving **580** in
 the portable gate.
 
-- **Portable gate on Linux (VM2 clean room, Python 3.12)**: `549 passed, 0 skipped`. No skips are
+- **Portable gate on Linux (VM2 clean room, Python 3.12)**: `580 passed, 0 skipped`. No skips are
   permitted — the clean room fails on a skipped test, on zero collected, on a missing wheel, on a fatal
   audit rule and on an accepted red-team attack. Audit rule A OK; every red-team attack refused;
   `CLEAN-ROOM GREEN`.
 - **Portable gate on Linux, Python 3.10**: the same suite on the floor interpreter.
-- **On Windows**: `543 passed, 6 skipped`. The six are symlink checks, which report themselves as such
+- **On Windows**: `574 passed, 6 skipped`. The six are symlink checks, which report themselves as such
   because the platform does not support symlinks without elevation. They run rather than skip on Linux,
-  which is why the clean room reports 549. Neither figure is a discrepancy; they are the same suite on
+  which is why the clean room reports 580. Neither figure is a discrepancy; they are the same suite on
   two environments.
 - **GitHub CI** on the public repository: `tests (py3.10)`, `tests (py3.12)`,
   `artefacts (licence + metadata)` and `a2a TCK (jsonrpc, must)` all success. The A2A job is a
@@ -73,28 +73,43 @@ exact fields, the command to run on receipt, and the meaning of each exit code.
 
 ### 2. More independent operators, captured while the data exists (bounds the independence claim)
 
-**Substantially closed in 0.13.0.** `crossnode` requires several operators believed
-organisationally distinct to agree on the same attested interval — on `VotersCommitment`,
-`LnProvenWeight`, `BlockHeadersCommitment` and `sha256(StateProof)`. Disagreement is a refusal,
-not a vote, because a majority rule would let two operators agreeing on a fiction outvote one
-telling the truth. One operator answering is also a refusal, and `--min-operators 1` is refused
-outright. `examples/walk-mainnet-corroborated/` holds a three-interval walk whose derived
-`ln_proven_weight` matches what both operators independently reported.
+**Still open, and worse than this section previously said.** `crossnode` compares several
+operators on the same attested interval — on `VotersCommitment`, `LnProvenWeight`,
+`BlockHeadersCommitment` and `sha256(StateProof)`. Disagreement is a refusal, not a vote,
+because a majority rule would let two operators agreeing on a fiction outvote one telling the
+truth. One operator answering is also a refusal, and `--min-operators 1` is refused outright.
 
-**What is still missing**: corroboration happens at capture time, and public endpoints retain
-only three or four state-proof intervals — one interval back is available, four back is pruned,
-and older requests return `500 ledger does not have entry`. An old capture cannot be
-cross-checked by anyone afterwards, so the set of corroborated intervals cannot be widened
-retrospectively. `provenance.json` states plainly that distinct endpoints are not proven to be
-separate businesses.
+**The default pair was one operator.** The previous build defaulted to `algonode` +
+`nodely`, and those are one business: Nodely's documentation says the old `algonode.cloud`
+hosts are "same rules, same infra as `nodely.dev`", and both stamp an `x-and-nl` header
+header. So `examples/walk-mainnet-corroborated/` is evidence that two hostnames agree, not
+that two organisations do. `crossnode` now refuses a pair that shares a provider header or
+names one endpoint twice, the default list is empty, and `--allow-same-operator` exists only
+to re-analyse third-party captures without ever reporting `corroborated`.
 
-**What is unproven**: that any operator is honest, and that the operators are economically
-independent. Agreement shows that one operator alone cannot substitute a different signing set
-without another contradicting it. It does not show that either is telling the truth about the
-chain.
+**What is still missing**: a second operator that is not Nodely. Measured while writing
+this: Voi has exactly one public provider (`nodely`), whose `.dev` and `.io` hostnames
+return byte-identical proofs; on Algorand every other public endpoint checked either is
+Nodely or needs credentials. A self-run node is the only option that requires no third
+party, and the software supports that (`--operator mine=https://your-node`).
 
-**Who owns it**: an operator with a node. `docs/INDEPENDENT-OPERATORS.md` gives the collection
-and acceptance commands.
+**The retention window is chain-specific, and was stated for both chains from one
+measurement.** On Algorand the constraint is real: `66647552` now returns
+`500 ledger does not have entry`, 1,024 rounds back already fails, and the shipped walk is
+uncorroboratable forever. On **Voi it is not**: 65,536 rounds back still answers, and the
+shipped Voi example (`24213760`, ~349,000 rounds / ~11 days back) still returns its exact
+interval. So corroboration on Voi *can* be widened retrospectively; on Algorand it cannot.
+
+**What is unproven**: that any operator is honest. Agreement shows that one operator alone
+cannot substitute a different signing set without another contradicting it. It does not
+show that either is telling the truth about the chain. Identical state proofs are **not**
+evidence of collusion — a state proof is deterministic, so honest independent nodes are
+expected to return the same bytes.
+
+**Who owns it**: an operator with a node. `docs/SECOND-OPERATOR.md` is the actionable
+version of this ask — what to run, what it costs, what it does and does not prove, and the
+measured constraint that there is no public Voi testnet to practise against.
+`docs/INDEPENDENT-OPERATORS.md` gives the collection and acceptance commands.
 
 ### 3. Four economic decisions (blocks on-chain bonding entirely)
 
@@ -135,7 +150,7 @@ an independent review of one's own dependency cannot be self-performed.
 
 ## Things that look like blockers and are not
 
-- **PyPI publication**: done. `0.13.3` is live, installed from the index in a fresh virtual
+- **PyPI publication**: done. `0.13.6` is live, installed from the index in a fresh virtual
   environment with `PYTHONPATH` cleared, console script exercised.
 - **Licence and metadata**: done. `LICENSE` and `NOTICE` in repository, wheel and sdist; PEP 639
   `License-Expression`; no contradicting classifier; verified inside the published wheel.
@@ -173,7 +188,7 @@ decision rather than an omission, for the reason given under blocker 3.
 
 ```sh
 # portable suite
-pip install avm-mesh==0.13.3 pytest
+pip install avm-mesh==0.13.6 pytest   # 0.13.6 is the published version
 AVM_PROOFPACK_TESTS=<avm-proofpack-checkout>/tests AVM_MESH_REQUIRE_FIXTURE=1 \
   python -m pytest tests -q -m 'not signer'
 

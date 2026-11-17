@@ -41,12 +41,26 @@ from datetime import datetime, timezone
 
 INTERVAL = 256
 
-#: Operators believed to be organisationally distinct. Declared, not proven -- the report
-#: says so, and a reader who knows better can pass --operator to correct it.
-OPERATORS = (
-    ("algonode", "https://mainnet-api.algonode.cloud"),
-    ("nodely", "https://mainnet-api.4160.nodely.dev"),
-)
+#: NO DEFAULT OPERATORS. This was previously
+#: ``(("algonode", "https://mainnet-api.algonode.cloud"),
+#:    ("nodely", "https://mainnet-api.4160.nodely.dev"))``, and those are one business:
+#: Nodely documents the old ``algonode.cloud`` hosts as "same rules, same infra as
+#: ``nodely.dev``". A capture taken against that pair records agreement between one
+#: provider's two hostnames, which is not corroboration. Operators must be named, and the
+#: pair is checked for sameness before anything is captured.
+OPERATORS: tuple[tuple[str, str], ...] = ()
+
+#: Provider fingerprint headers, mirroring `avm_mesh.crossnode.FINGERPRINT_HEADERS`. Kept
+#: as a literal rather than an import because this tool is deliberately runnable against a
+#: checkout without the package installed, but a test asserts the two agree.
+FINGERPRINT_HEADERS = ("x-and-nl",)
+
+#: Mirrors `avm_mesh.crossnode.INDEPENDENCE_*` for the same reason, and a test asserts the
+#: literals agree. The distinction is what keeps a capture from claiming more than it
+#: measured.
+INDEPENDENCE_EVIDENCED = "evidenced"
+INDEPENDENCE_UNKNOWN = "unknown"
+INDEPENDENCE_SAME = "same_operator"
 
 #: The path a state proof is fetched on, and the shape of the response.
 FIELDS = ("VotersCommitment", "LnProvenWeight", "BlockHeadersCommitment")
@@ -69,6 +83,58 @@ def _get(endpoint: str, path: str, *, timeout: float = 25.0) -> dict:
     if len(raw) > MAX_RESPONSE_BYTES:
         raise ValueError(f"{path} returned more than {MAX_RESPONSE_BYTES} bytes")
     return json.loads(raw)
+
+
+def _get_with_fingerprint(endpoint: str, path: str, *,
+                          timeout: float = 25.0) -> tuple[dict, dict]:
+    """GET a JSON body together with the provider headers that came with it.
+
+    The headers are what make the independence claim checkable, and this tool used to
+    discard them — which is why the tool that produces the published evidence bundle could
+    record ``cross_operator_agreement: true`` for one provider under two names. A comment
+    here claimed the pair was checked for sameness before capture; nothing checked it.
+    """
+    request = urllib.request.Request(endpoint.rstrip("/") + path,
+                                     headers={"accept": "application/json"})
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        fingerprint = {h.lower(): response.headers.get(h, "")
+                       for h in FINGERPRINT_HEADERS}
+        raw = response.read(MAX_RESPONSE_BYTES + 1)
+    if len(raw) > MAX_RESPONSE_BYTES:
+        raise ValueError(f"{path} returned more than {MAX_RESPONSE_BYTES} bytes")
+    return json.loads(raw), {k: v for k, v in fingerprint.items() if v}
+
+
+def _same_operator_pair(stamps: dict[str, dict]) -> str | None:
+    """The first refusal reason for a same-operator pair, or None.
+
+    Extracted so it can be tested directly: the first version of this check lived only as a
+    comment, and the second as an untested inline loop.
+    """
+    seen: dict[str, str] = {}
+    for name, fingerprint in stamps.items():
+        for header, value in fingerprint.items():
+            if header not in FINGERPRINT_HEADERS or not value:
+                continue
+            key = f"{header}={_operator_identity(header, value)}"
+            if key in seen:
+                return (f"operators {seen[key]!r} and {name!r} returned the same provider "
+                        f"header ({key}), so they are one provider under two names. A "
+                        "capture against that pair records one operator agreeing with "
+                        "itself, which is not corroboration.")
+            seen[key] = name
+    return None
+
+
+def _operator_identity(header: str, value: str) -> str:
+    """The part of a fingerprint value that names the operator: the datacentre.
+
+    ``x-and-nl`` is ``<node>@<datacentre>`` and the node label is load-balanced, so the
+    raw value is two coin flips. Mirrors `avm_mesh.crossnode._operator_identity`.
+    """
+    if header == "x-and-nl" and "@" in value:
+        return value.rsplit("@", 1)[1]
+    return value
 
 
 def _message(algod_message: dict) -> dict:
@@ -148,6 +214,15 @@ def main(argv=None) -> int:
                   "http:// or https://", file=sys.stderr)
             return 2
         operators.append((name, url))
+    if not operators:
+        print(
+            "refusing: no operators given, and there is no safe default. The only two "
+            "public Algorand endpoints that serve state proofs are Nodely's current and "
+            "legacy hostnames, which are one provider, so 'corroborating' them would "
+            "record a provider agreeing with itself. Pass --operator NAME=URL for each "
+            "operator you believe is genuinely separate -- ideally one you run yourself.",
+            file=sys.stderr)
+        return 2
     if args.hops < 1:
         # A walk needs at least one interval to capture; `requested[0]` below assumes a
         # non-empty list, and an IndexError is not how a usage error should present.
@@ -163,11 +238,42 @@ def main(argv=None) -> int:
     out = pathlib.Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
 
+    # Check the operator set for sameness BEFORE capturing anything. The comment above used
+    # to claim this happened; it did not, so this tool — the one that writes the published
+    # evidence bundle — could record cross_operator_agreement for one provider's two
+    # hostnames. Headers are read from /v2/status, which is the cheapest endpoint that
+    # carries them and is fetched anyway on the next line.
     try:
-        heads = {name: int(_status(url)["last-round"]) for name, url in operators}
+        heads, stamps = {}, {}
+        for name, url in operators:
+            body, fingerprint = _get_with_fingerprint(url, "/v2/status",
+                                                      timeout=args.timeout)
+            heads[name] = int(body["last-round"])
+            stamps[name] = fingerprint
     except Exception as exc:
         print(f"could not read node status: {exc}", file=sys.stderr)
         return 1
+
+    refusal = _same_operator_pair(stamps)
+    if refusal is not None:
+        print(f"refusing: {refusal}", file=sys.stderr)
+        return 2
+
+    if not any(stamps.values()):
+        # Not a refusal: a self-run node has no reason to send Nodely's stamp, and this is
+        # the operator the docs ask people to add. But the capture cannot claim the
+        # independence it did not measure, so the state is recorded as unknown and the
+        # agreement flag is written accordingly further down.
+        independence_state = INDEPENDENCE_UNKNOWN
+        print("note: no operator sent a fingerprint header, so independence cannot be "
+              "verified from this capture; it is recorded as 'unknown', not corroborated")
+    elif any(not f for f in stamps.values()):
+        independence_state = INDEPENDENCE_UNKNOWN
+        unstamped = [n for n, f in stamps.items() if not f]
+        print(f"note: operator(s) {', '.join(unstamped)} sent no fingerprint header; "
+              "independence is unverified for this capture and is recorded as such")
+    else:
+        independence_state = INDEPENDENCE_EVIDENCED
     # The newest interval every operator is certain to have finished. One interval back
     # from the newest available boundary, so the proof is complete rather than in flight.
     head = min(heads.values())
@@ -352,11 +458,18 @@ def main(argv=None) -> int:
         "beyond_retention": missing,
         "captures": captures,
         "corroboration": corroborations,
-        "cross_operator_agreement": all_agreed,
+        "cross_operator_agreement": bool(all_agreed
+                                         and independence_state == INDEPENDENCE_EVIDENCED),
+        "independence_state": independence_state,
         "independence": (
             "agreement across distinct endpoints, not proof of independent ownership; "
             "a shared upstream, hosting provider or operator running two domains defeats "
-            "this, and a reader who knows the operators should say so"
+            "this, and a reader who knows the operators should say so. "
+            + ("Every operator stamped itself and no two stamps collided."
+               if independence_state == INDEPENDENCE_EVIDENCED else
+               "At least one operator sent no fingerprint header, so independence was "
+               "NOT verified for this capture: agreement is real, the independence claim "
+               "is not established.")
         ),
         "retention_note": (
             "corroboration is only possible during capture: public endpoints retain three "

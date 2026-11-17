@@ -1,5 +1,188 @@
 # Changelog
 
+## 0.13.6 — the 0.13.5 page told readers to install 0.13.5 when it was published
+
+No module under `src/avm_mesh/` changed here except `__version__`. This release exists because a
+distribution's long description is frozen at build time: 0.13.5's wheel and sdist were built from the
+tree while it was still unpublished, so `pypi.org/project/avm-mesh/0.13.5/` announces "`pip install
+avm-mesh` currently installs `0.13.4`" and "Install `0.13.5` when it is published", and quotes the
+577/580 test counts from before this repository grew the doc-version guard. That is what
+`info.description` in the index returns — read back, not inferred.
+
+The code fix described there is real and present in both versions: `crossnode` refuses Nodely's two
+Voi hostnames with `AGREEMENT ONLY, NOT CORROBORATED (unknown)` and exit 2, because neither sends a
+fingerprint header the check could use to establish independence.
+
+0.13.5 is left in place rather than yanked. It is the same code as this release, nothing is wrong with
+it, and yanking would break the pins of anyone who moved to it in the meantime.
+
+## 0.13.5 — three false claims, found by an independent review of the published 0.13.4
+
+0.13.4 is on PyPI and its defects are in what `pip install avm-mesh` serves today. A version
+cannot be withdrawn, only yanked, so this release supersedes it and says exactly what was
+wrong.
+
+### 1. Silence was read as independence (`crossnode.py`)
+
+`corroborated` was `agreed and not same_operator`, and `same_operator` was only ever set by
+a header **collision**. An operator that sends no fingerprint header therefore produced no
+conflict, and no conflict read as independence.
+
+This was not theoretical. Voi's two public hostnames —
+`mainnet-api.voi.nodely.dev` and `mainnet-api.voi.nodely.io` — send **no** `x-and-nl` at
+all (measured with curl), and this repository's own `docs/SECOND-OPERATOR.md` names that
+exact pair as one operator with byte-identical proofs. 0.13.4 answered
+`agreed: true, corroborated: true, same_operator_suspected: false` for them, verified live
+at round 24571392. The check was catching only the operators careless enough to identify
+themselves.
+
+The fix is a state, not a boolean. `independence_state` is one of `evidenced`, `asserted`,
+`unknown`, `same_operator` or `waived`, and `corroborated` is True only for the first two.
+`unknown` still reports `agreed: true` — the agreement is real — and withholds the
+independence claim with a `failure` string naming which operators sent nothing.
+
+A self-run node is the case this cannot measure, so it can be **declared** with
+`--declared-independent`: the result is `asserted`, and the recorded basis says independence
+rests on the caller's assertion rather than on a measurement. The two are deliberately
+distinguishable.
+
+### 2. `--allow-same-operator` reported corroboration (`cli.py`)
+
+The flag is documented in four places — its own `--help`, `CHANGELOG.md`,
+`docs/HANDOVER.md`, `docs/INDEPENDENT-OPERATORS.md` — as reporting agreement but **never**
+claiming corroboration. It set `agreed = True` and left `same_operator` False, so:
+
+- the JSON carried `corroborated: true`,
+- the CLI printed `verdict: corroborated by distinct endpoints`,
+- the exit code was **0**.
+
+Verified against the real Nodely pair. The state is now `waived`, `corroborated` is False in
+both the object and the JSON, the verdict reads `AGREEMENT ONLY, NOT CORROBORATED`, and the
+process exits non-zero. A test asserts the JSON field specifically, because a machine
+consumer reading it was the one being misled.
+
+### 3. The capture tool had no sameness check at all (`tools/fetch_corroborated_walk.py`)
+
+`tools/fetch_corroborated_walk.py` is named in `provenance.json` as the tool that produced
+the published evidence bundle. Its comment said the operator pair "is checked for sameness
+before anything is captured". Nothing checked it: `_get` discarded response headers
+entirely. Probes confirmed two same-stamp endpoints recorded
+`cross_operator_agreement: true`, and so did the same URL passed twice.
+
+It now reads headers from `/v2/status` before capturing, refuses a same-operator pair with
+exit 2 and writes nothing, and gates `cross_operator_agreement` on
+`independence_state == "evidenced"` rather than on agreement alone. A test asserts the
+tool's constants equal `crossnode`'s, since the drift between two copies of the rule is
+what allowed this.
+
+### Also corrected
+
+- **`_endpoint_identity`** normalises scheme, default port, trailing slash and the
+  `localhost`/`127.0.0.1` spellings, so one server named two ways is caught. Previously
+  only case and a trailing slash were handled, and with no headers present it was reported
+  as corroborated.
+- **`same_operator` docstring** said it was set when responses are byte-identical, which
+  would invert the mechanism — state proofs are deterministic, so honest independent nodes
+  return identical bytes. The code never did this; the comment invited a future maintainer
+  to implement exactly that bug.
+- **`README`** told readers to trust a `corroborated` field that was not a Python attribute
+  at all, only a key in `to_dict()`. It is now a property returning the same verdict.
+- **`docs/INDEPENDENT-OPERATORS.md`, `README.md`** document the five states, including the
+  one that used to be silently wrong.
+
+### What was already right, and stays
+
+- Agreement between one provider's two hostnames is still positively caught on Algorand
+  (`x-and-nl` datacentre comparison), and identical state proofs are still **not** treated
+  as collusion — that would fail every honest answer.
+- No default operator list; a missing `--operator` is a loud refusal.
+- `x-and-dl` is not an identity (it reads `0.05` on unrelated operators too).
+- The node label in `x-and-nl` is load-balanced and is not compared; the datacentre is.
+
+### Provenance of these findings
+
+An independent review with filesystem access reproduced all three against live endpoints
+before the fixes, and each is pinned by a test in `tests/test_independence_claim.py` that
+**fails against 0.13.4** — verified by running the new tests against the published sdist,
+not by assuming they would.
+
+### 4. The identity was the load-balanced node, not the operator
+
+`x-and-nl` reads `<node>@<datacentre>`, for example `de1@de_central`. It was compared as a
+whole string. **The node label is load-balanced**: twelve requests to each of
+`mainnet-api.4160.nodely.dev` and `mainnet-api.algonode.cloud` returned `de1@de_central`
+and `de2@de_central` in a 5:7 ratio, *from the same endpoint*. Two requests to ONE provider
+therefore disagreed about a third of the time, and when they did, the pair was accepted as
+independent — the exact failure this release exists to prevent.
+
+It looked correct in every earlier check because `x-and-dl: 0.05` also matched, and that
+became the header doing the refusing. Confirming that took one probe: two responses with
+different `x-and-nl` values and no `x-and-dl` were reported **`ACCEPTED AS INDEPENDENT`**.
+
+- **`x-and-nl` is compared by its datacentre half.** `de1@de_central` and `de2@de_central`
+  are two machines owned by one operator, so the operator is the datacentre. A value with
+  no `@` is used whole, which leaves any other provider's format working.
+- **`x-and-dl` is no longer an identity.** It is a rate value that reads `0.05` on both
+  Nodely hostnames, and it also reads `0.05` on unrelated operators that happen to share a
+  rate. Testing the false-positive path — two different datacentres, both sending it —
+  refused them as one business. A check that fires on unrelated operators is worse than one
+  that misses a related pair, because it makes real corroboration impossible.
+
+### Why 0.13.4 stays on the index
+
+A published version cannot be withdrawn, only yanked. 0.13.4 is left in place rather than
+yanked: its default operator list is empty, so nothing silently claims corroboration
+without being asked, and it refuses the Nodely pair most of the time. It is not harmless —
+finding 1 above is a false claim it makes on Voi — but yanking it would break anyone who
+pinned it without giving them a version to move to first. Move to 0.13.5.
+
+## 0.13.4 — the two "operators" were one operator, and the tool now refuses that
+
+The claim that motivated this release was already in the repository: `crossnode` exists to
+prove a walk's provenance is "not one endpoint's word". Its own default paired
+`mainnet-api.algonode.cloud` with `mainnet-api.4160.nodely.dev`. Those are one business.
+Nodely's documentation says the old `algonode.cloud` hosts are *"same rules, same infra as
+`nodely.dev`"*, and measured, both return byte-identical state proofs and `x-and-nl`
+headers naming the same datacentre (`de_central`), so they are one operator. So for as long as this tool has shipped, its demonstration of independence
+has been a provider agreeing with itself — the exact failure the module's own docstring
+promises to prevent.
+
+### Fixed
+
+- **`corroborate_round` refuses a pair that looks like one provider.** Two responses sharing
+  an operator identity (`x-and-nl`'s datacentre), or naming the same endpoint twice, produce
+  `not corroborated: …` and set `same_operator`. A new `corroborated` field is what a reader
+  should trust; `agreed` now means only that the compared fields matched.
+- **The default operator list is empty.** A default that is one provider twice is worse than
+  no default, because a reader takes "2 operators agree" at face value. `crossnode` now
+  requires `--operator NAME=URL` and says why when it is missing.
+- **`--allow-same-operator`** compares the fields regardless, for re-analysing third-party
+  captures, and never reports corroboration.
+- **`provenance.json` for `examples/walk-mainnet-corroborated/` now says `NOT INDEPENDENT`**
+  in its `independence` field, and records what the walk does and does not establish.
+- **Every capability claim that repeated the old assumption was corrected**, not just the
+  one document that framed it: `README.md` (its flagship `crossnode` example showed the
+  output of the one-provider pair and had to be replaced with the refusal),
+  `docs/WHY.md`, `docs/PUBLISH-READINESS.md` (which called this "the one claim no one else
+  in this space can make"), `docs/INDEPENDENT-OPERATORS.md` and `docs/HANDOVER.md`.
+  Exit codes and CLI behaviour were verified by running them, not read from the source.
+
+### Corrected, not fixed, because the measurement was wrong
+
+- The retention window was stated for both chains from one Algorand measurement. It is real
+  on Algorand — `66647552` now returns `500 ledger does not have entry` — but **not on Voi**:
+  65,536 rounds back still answers, and the shipped Voi example (~349,000 rounds / ~11 days)
+  still returns its exact interval. Corroboration on Voi can be widened retrospectively; on
+  Algorand it cannot. `docs/HANDOVER.md` and `docs/INDEPENDENT-OPERATORS.md` now say so.
+
+### Not claimed
+
+Identical state proofs are not treated as evidence of collusion. A state proof is a
+deterministic function of the interval's signing set, so honest independent nodes are
+*expected* to return the same bytes. Detecting sameness uses provider headers and duplicate
+endpoints only; it is heuristic, and a provider that strips headers defeats it. What it
+catches is the ordinary case — one business, two domains — which is the case that shipped.
+
 ## 0.13.3 — the skip reasons in the README were wrong, and this corrects them
 
 0.13.2 said the six skipped tests were "four symlink checks and two that require the optional

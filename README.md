@@ -60,7 +60,7 @@ The package installs one command-line tool, `avm-mesh`, with five subcommands:
 | `avm-mesh serve` | run a *witness* that serves receipts and evidence over a content-addressed store |
 | `avm-mesh anchor` | derive a trust anchor by walking state proofs forward from a checkpoint you pin |
 | `avm-mesh corroborate` | ask several witnesses for one receipt and check that they agree |
-| `avm-mesh crossnode` | ask unrelated **node operators** about one interval, so an anchor is not one endpoint's word |
+| `avm-mesh crossnode` | ask unrelated **node operators** about one interval, and refuse when the answers look like one provider |
 
 A *witness* and an *anchor* are both explained below. For now: a witness is simply something that serves
 evidence, and an anchor is the trusted starting point you supply yourself.
@@ -330,35 +330,76 @@ where it came from. `crossnode` closes that: fetch the same interval from operat
 and require their independent answers to agree on the signing set, the proven weight, the block-headers
 commitment and the proof itself.
 
+Operators must be named. There is no default, because the only two public Algorand endpoints that serve
+state proofs belong to one provider (Nodely and its legacy `algonode.cloud` hosts), and offering them as
+a pair would report a provider agreeing with itself.
+
 ```sh
-# pick a round within the last few intervals; they are pruned after that
-avm-mesh crossnode --round 66647808
+avm-mesh crossnode --round 66983936 \
+  --operator nodely=https://mainnet-api.4160.nodely.dev \
+  --operator mine=https://your-node.example
 ```
 
+Naming Nodely's two hostnames — which is what this tool used to do silently — is now refused:
+
 ```
-round 66647808
+round 66989568
   operators answering: 2 of 2 (2 required)
-  AGREE  voters_commitment: 00xqo/JW/ldbMWflfITg9UmhaD0/iib4xwXD8dsYYaROni9RWNcvaarkFYdhR7Q45xTTE/CDeRYpMM1M3j9cOg==
-  AGREE  ln_proven_weight: 2230295
-  AGREE  block_headers_commitment: saMg/HdZPJA/i1Z83FeBRYrGj05HuZOyR94aUHyp9L0=
-  AGREE  state_proof_sha256: 86905b0efa86ffedf7f5824e8b55d0d573dc24c9934f42d84166412fc5108b25
-  verdict: corroborated by distinct endpoints
+  AGREE  voters_commitment: puF+q1sCalYSlsLhB241C880uCf693x648LdDLnl/xGqxR3ldYyx9Jpyr7rfPNq9q+PxhTJmBkg2SSfiA9mPSA==
+  AGREE  ln_proven_weight: 2230310
+  AGREE  block_headers_commitment: /AmEdU8Clv/TekFe9x99SENSVvaCizqHtOfUUjnNp+Q=
+  AGREE  state_proof_sha256: d278abb5e0bfd9102ad1ba4a8c63bc277ad971faee62c08c25c403893fe4a5a6
+  verdict: NOT CORROBORATED -- not corroborated: operators 'nodely' and 'algonode' returned the same
+           provider header (x-and-nl=de_central), so they are one provider answering under two names
 ```
+
+The four fields agreeing is the point: they cannot agree by accident, and refusing them anyway is the
+correction. A `corroborated` field is what to trust; `agreed` only reports that the compared values matched.
+
+`corroborated` is True only when the independence claim is **supported**. There are two kinds of support,
+and the second is not a measurement:
+
+| `independence_state` | Meaning | `corroborated` |
+|---|---|---|
+| `evidenced` | every operator stamped itself and no two stamps collided | `true` |
+| `asserted` | you said you run one endpoint yourself (`--declared-independent`) | `true` |
+| `unknown` | at least one operator sent no fingerprint header | **`false`** |
+| `same_operator` | positive evidence of one provider | `false` |
+| `waived` | `--allow-same-operator` skipped the check | `false` |
+
+`unknown` is the row that matters. An earlier version treated a missing header as evidence of independence,
+so two Nodely hostnames on **Voi** — which send no fingerprint at all — came back `corroborated: true`,
+for a pair this repository's own `docs/SECOND-OPERATOR.md` calls one operator. Silence is not a
+measurement. When nothing identifies the operators, agreement is still reported (`agreed: true`) and the
+independence claim is withheld, with a `failure` string naming exactly which operators sent nothing.
+
+The identity compared is the **datacentre**, not the full header value. `x-and-nl` reads
+`<node>@<datacentre>`, and the node label is load-balanced — twelve requests to each hostname returned
+`de1@de_central` and `de2@de_central` in a 5:7 ratio, from the *same* endpoint. Two nodes in one datacentre
+are one operator, and comparing the raw value would have reported them as independent about a third of the
+time.
 
 Disagreement is a refusal, not a vote — two operators agreeing on a fiction and one telling the truth must
 fail, or a coordinated pair carries it. One operator down is also a refusal, not quiet agreement with itself.
 
-**This only works at capture time.** The round in the example above has an expiry date: public endpoints
-retain three or four state-proof intervals and prune everything older, so a specific round stops working
-within about ten minutes of being written here. Substitute a current one — `--round` must be a multiple of
-256 — or use the shipped captures, which were corroborated when they were taken. Either way, an old interval
-cannot be cross-checked afterwards by anyone. So the capture tool corroborates as it
-fetches, and `examples/walk-mainnet-corroborated/` holds three consecutive intervals captured that way. The
-walk then derives its anchor from the proofs alone, and that derived value equals what both operators
-reported for the same interval — two independent derivations landing on the same number.
+**This only works at capture time — on Algorand.** The round in the example above has an expiry date:
+public Algorand endpoints retain one or two state-proof intervals and prune everything older, so a specific
+round stops working within about ten minutes of being written here. Substitute a current one — `--round`
+must be a multiple of 256 — or use the shipped captures. Either way, an old Algorand interval cannot be
+cross-checked afterwards by anyone. **Voi is different:** measured 2026-11-14, 65,536 rounds back still
+answered, so a Voi capture can be corroborated later within that window.
 
-Honest limit: distinct endpoints are not proven separate businesses. `provenance.json` says so in the same
-words. See [`docs/INDEPENDENT-OPERATORS.md`](docs/INDEPENDENT-OPERATORS.md).
+So the capture tool corroborates as it fetches, and `examples/walk-mainnet-corroborated/` holds three
+consecutive intervals captured that way. The walk derives its anchor from the proofs alone, and that
+derived value equals what both endpoints reported for the same interval — two independent derivations
+landing on the same number.
+
+Honest limit, and it is now known rather than suspected: **both endpoints in that example belong to
+Nodely.** Its legacy `algonode.cloud` hosts are, per Nodely's own documentation, "same rules, same infra"
+as `nodely.dev`, and both stamp the same provider header. So the example proves the agreement machinery and
+the chained derivation; it does not prove two organisations agree, and `provenance.json` records
+`NOT INDEPENDENT`. `crossnode` refuses that pair today. See
+[`docs/INDEPENDENT-OPERATORS.md`](docs/INDEPENDENT-OPERATORS.md).
 
 **What this proves, exactly.** The Falcon signatures, reveal membership, signed weight and coin selection
 over that bundle are all verified, and you can re-verify them yourself. One caveat: the anchor in the
@@ -653,17 +694,23 @@ independent. That is what the check above is for.
 
 ## Status
 
-**Version `0.13.3`** — `pip install avm-mesh`.
+**Version `0.13.6`**, published to PyPI as wheel and sdist. It carries 0.13.5's code unchanged and exists
+because a long description is frozen at build time: 0.13.5's own page still told readers to install 0.13.5
+"when it is published". The fix it carries is against `0.13.4`, which compared a load-balanced node label
+when checking independence and so accepted one provider under two hostnames as independent -- Voi's two
+public hostnames send no fingerprint header at all, and 0.13.4 reported that pair as corroborated. 0.13.5
+onwards answer with `independence_state` and refuse the claim; `--declared-independent` records a self-run
+node as an assertion rather than a measurement. Read `corroborated`, never `agreed`.
 
-The portable test gate runs **549 tests with 0 skipped** on both Python 3.12 and Python 3.10.22 (an isolated
+The portable test gate runs **580 tests with 0 skipped** on both Python 3.12 and Python 3.10.22 (an isolated
 clean-room run: offline install from wheels only, plus the trust-boundary audit and the red-team suite), so
 `Requires-Python: >=3.10` is demonstrated rather than asserted.
 
-552 tests are collected in total. The portable gate deselects three test-only Falcon *signer* checks, which run
+583 tests are collected in total. The portable gate deselects three test-only Falcon *signer* checks, which run
 separately in a signer-enabled environment and pass with `pqcrypto` 0.1.0 — deliberately not a runtime
 dependency. With the fixtures provisioned this Windows host skips six, all of them symlink checks needing a
 platform that can create one (`test_anchor.py` twice, `test_cli_gzip.py`, `test_file_resolver.py` twice,
-`test_service.py`); they run rather than skip on the Linux clean room, which is how it reports 549 tests with
+`test_service.py`); they run rather than skip on the Linux clean room, which is how it reports 580 tests with
 0 skipped. CI runs the portable suite with the test fixture provisioned, and a missing fixture is treated as a
 failure, not a skip.
 
@@ -691,7 +738,7 @@ built wheels offline and runs against site-packages.
 | Service resource bounds (size cap, rate limit, slowloris timeout) | shipped 0.6.0 |
 | A2A settlement-evidence extension (v1.0 wire format) | shipped; parsed by `a2a-sdk` 1.3.0; TCK `must`/jsonrpc is a **required CI gate** (80 passed, 155 skipped as inapplicable at `--level must`, 0 failed) |
 | Rails adoption kit (`avm_mesh.rails`) | shipped; **not yet round-tripped** against a real rails receipt |
-| Corroborated walk captures (`examples/walk-mainnet-corroborated/`) | shipped 0.13.0 — three intervals, two operators agreeing, walk derived from the proofs alone |
+| Corroborated walk captures (`examples/walk-mainnet-corroborated/`) | shipped 0.13.0 — three intervals, walk derived from the proofs alone. **NOT independent corroboration:** both endpoints are Nodely's, so this is two hostnames of one provider agreeing. `provenance.json` records `NOT INDEPENDENT` and `crossnode` now refuses that pair |
 | AC2 consent binding (`avm_mesh.ac2`, `[ac2]` extra) | shipped; `sender_bound` on real Algorand + Voi captures; **approval half synthetic**, see below |
 | Witness bonding (`bond.py`) | model only — **no on-chain escrow**, see Honest limits |
 

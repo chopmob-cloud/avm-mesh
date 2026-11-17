@@ -49,24 +49,37 @@ def _rounds() -> list[int]:
     return _provenance()["captured_rounds"]
 
 
-def test_the_capture_set_is_marked_corroborated_across_operators():
-    """The property that makes this capture set different from every earlier one."""
+def test_the_capture_set_does_not_claim_corroboration_across_operators():
+    """This capture set is two Nodely hostnames, and the file now says so.
+
+    The previous version of this test asserted `cross_operator_agreement is True`, which
+    was the repository agreeing with its own belief: the two "operators" are one business.
+    A test that pins a false claim is worse than no test, because it makes the false claim
+    look checked.
+    """
     record = _provenance()
-    assert record["cross_operator_agreement"] is True
-    assert len(record["operators"]) >= 2
-    assert len({op["endpoint"] for op in record["operators"]}) == len(record["operators"])
+    assert record["cross_operator_agreement"] is False
+    assert record["corroborated"] is False
+    assert record["captured_with_same_operator"] is True
+    assert "NOT INDEPENDENT" in record["independence"]
     for entry in record["corroboration"]:
-        assert entry["corroborated"] is True, entry
-        assert len(entry["operators_answering"]) >= 2, entry
+        # The field comparison really happened and really agreed. That is kept as
+        # evidence; what is refused is the conclusion drawn from it.
+        assert entry["corroborated"] is False, entry
+        assert entry["fields_agreed"] is True, entry
+        assert entry["same_operator_suspected"] is True, entry
+        assert "NOT CORROBORATED" in entry["verdict"], entry
 
 
 def test_the_provenance_names_what_independence_does_not_mean():
-    """A reader must not take 'agreed' as 'these are separately owned'."""
+    """A reader must not take 'the fields agreed' as 'these are separately owned'."""
     record = _provenance()
-    assert "not proof of independent ownership" in record["independence"]
-    assert "shared upstream" in record["independence"]
+    assert "NOT INDEPENDENT" in record["independence"]
+    assert "Nodely" in record["independence"]
     assert "retention_note" in record, "the retention limit must be recorded, not implied"
-    assert "three" in record["retention_note"]
+    # The retention claim is now chain-specific rather than one measurement applied to both.
+    assert "Algorand" in record["retention_note"]
+    assert "Voi" in record["retention_note"]
 
 
 def test_the_walk_verifies_and_derives_the_reported_anchor():

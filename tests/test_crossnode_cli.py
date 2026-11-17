@@ -46,7 +46,7 @@ def test_the_cli_refuses_a_malformed_operator_spec(capsys):
 
 def test_the_cli_reports_a_disagreement_as_exit_2(monkeypatch, capsys):
     """Refusal (2) is a verdict about the network; malformed input (3) is about the call."""
-    from avm_mesh.crossnode import Corroboration, OperatorResponse
+    from avm_mesh.crossnode import Corroboration, INDEPENDENCE_EVIDENCED, OperatorResponse
 
     def fake(round_number, **kwargs):
         return Corroboration(
@@ -75,17 +75,20 @@ def test_both_round_and_bundles_are_honoured(monkeypatch, capsys, tmp_path):
     A user asking about one specific interval got answers about whichever rounds happened
     to be in the directory, with no indication that their round was ignored.
     """
-    from avm_mesh.crossnode import Corroboration
+    from avm_mesh.crossnode import Corroboration, INDEPENDENCE_EVIDENCED
 
     asked = []
 
     def fake_round(round_number, **kwargs):
         asked.append(round_number)
-        return Corroboration(round=round_number, agreed=True,
-                             responders=[], agreement={})
+        return Corroboration(round=round_number, agreed=True, responders=[],
+                             agreement={},
+                             independence_state=INDEPENDENCE_EVIDENCED)
 
     def fake_caps(directory, **kwargs):
-        return [Corroboration(round=66647552, agreed=True, responders=[], agreement={})]
+        return [Corroboration(round=66647552, agreed=True, responders=[],
+                             agreement={},
+                             independence_state=INDEPENDENCE_EVIDENCED)]
 
     monkeypatch.setattr("avm_mesh.crossnode.corroborate_round", fake_round)
     monkeypatch.setattr("avm_mesh.crossnode.corroborate_captures", fake_caps)
@@ -98,16 +101,20 @@ def test_both_round_and_bundles_are_honoured(monkeypatch, capsys, tmp_path):
 
 
 def test_a_round_named_twice_is_checked_once(monkeypatch, tmp_path):
-    from avm_mesh.crossnode import Corroboration
+    from avm_mesh.crossnode import Corroboration, INDEPENDENCE_EVIDENCED
 
     asked = []
 
     def fake_round(round_number, **kwargs):
         asked.append(round_number)
-        return Corroboration(round=round_number, agreed=True, responders=[], agreement={})
+        return Corroboration(round=round_number, agreed=True, responders=[],
+                             agreement={},
+                             independence_state=INDEPENDENCE_EVIDENCED)
 
     def fake_caps(directory, **kwargs):
-        return [Corroboration(round=66647808, agreed=True, responders=[], agreement={})]
+        return [Corroboration(round=66647808, agreed=True, responders=[],
+                             agreement={},
+                             independence_state=INDEPENDENCE_EVIDENCED)]
 
     monkeypatch.setattr("avm_mesh.crossnode.corroborate_round", fake_round)
     monkeypatch.setattr("avm_mesh.crossnode.corroborate_captures", fake_caps)

@@ -18,6 +18,15 @@ community is a separate, gated step and has not happened.
 
 ## Bootstrap: the initial live platform (proof of concept / test validation)
 
+**Scope is Algorand testnet only, and that is a measured limitation rather than a choice.**
+`examples/testnet_poc_demo.py` runs against real Algorand testnet (`testnet-api.4160.nodely.dev`
+answers `200`). A Voi leg cannot run the same way today: there is no reachable public Voi
+testnet — Nodely's matrix advertises `testnet-api.voi.nodely.dev` and it is NXDOMAIN, while
+Voi's docs give the `voitest-v1` genesis hash but no live endpoint. A Voi testnet leg needs a
+self-run `voi-node`, which is the same machine `docs/SECOND-OPERATOR.md` Option A needs. So
+the two open items share one piece of setup, and the bootstrap should not be read as
+chain-agnostic until that node exists.
+
 Purpose, stated plainly: to have a live platform NOW for testing, validation and proof of
 concept. It exists to exercise the whole witness-bonding flow end to end, declare a bond,
 attest, corroborate, challenge, slash-or-remove, so operators and reviewers can see the
@@ -27,6 +36,13 @@ not production economic security and does not claim to be.
 Bootstrap configuration:
 - Network: TESTNET only (Algorand testnet first; VOI testnet when an operator joins). No
   mainnet value is at risk at any point in the PoC.
+  **Caveat measured 2026-11-14: there is no reachable public Voi testnet.** Nodely's
+  endpoint matrix advertises `voitest-v1.0` hosts (`testnet-api.voi.nodely.dev`,
+  `testnet-idx.voi.nodely.dev`) and both are NXDOMAIN; Voi's own documentation gives the
+  `voitest-v1` genesis hash but no live public endpoint. A Voi testnet leg therefore needs a
+  self-run `voi-node` (`ghcr.io/voinetwork/voi-node`), not a URL. That is a real setup cost
+  and is stated here rather than discovered during the PoC. Algorand testnet is reachable
+  (`testnet-api.4160.nodely.dev` answers `200`).
 - Collateral: testnet ALGO/VOI, a nominal floor (the existing `MIN_BOND_MICROALGO = 1`
   ALGO placeholder is adequate for a PoC). Bonds are DECLARED, per current `bond.py`; the
   chain-verified escrow reader is the first thing built if the PoC validates and operators

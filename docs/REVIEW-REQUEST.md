@@ -14,15 +14,15 @@
 > ```sh
 > pip install avm-mesh==0.13.3 pytest
 >
-> python -m pytest tests -q -m 'not signer'           # 549 passed, 0 skipped on Linux; 543 passed, 6 symlink skips on Windows
+> python -m pytest tests -q -m 'not signer'           # 577 passed, 0 skipped on Linux; 571 passed, 6 symlink skips on Windows
 > python tools/audit_trust_boundary.py                # rule A OK; B/C/D advisory
 > python tools/red_team.py --fixture <bundle>.json.gz # RED TEAM CLEAN
 > python tools/mutation_check.py                      # every guard must bite
 > ```
 >
-> Collection is 552 tests; three signer tests are deselected by `-m 'not signer'`, leaving 549 in the
-> portable gate. On Windows six symlink checks skip (543 passed), because that platform cannot create
-> symlinks without elevation; they run on Linux, which is why the clean room reports 549 with no skips.
+> Collection is 580 tests; three signer tests are deselected by `-m 'not signer'`, leaving 577 in the
+> portable gate. On Windows six symlink checks skip (571 passed), because that platform cannot create
+> symlinks without elevation; they run on Linux, which is why the clean room reports 577 with no skips.
 > Fixture: `avm-proofpack/tests/fixtures/stake_attested_algorand_66457600.json.gz`. Set
 > `AVM_PROOFPACK_TESTS` to a checkout's `tests/` directory and `AVM_MESH_REQUIRE_FIXTURE=1` so an absent
 > fixture fails rather than skips.

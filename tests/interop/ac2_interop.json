@@ -1,0 +1,27 @@
+{
+  "emitted_by": "node + @algorandfoundation/ac2-sdk conventions",
+  "agent_did": "did:key:z6MkAgentInterop",
+  "controller_did": "did:key:z6MkControllersInterop",
+  "settlement": {
+    "chain": "voimain-v1.0",
+    "txid": "75LUFZZNQNOPS3SLQRHZZKZIECEEVGGP4N3ZZ2UU2UKFFJU5WG4A",
+    "round": 24213754,
+    "amount": "0",
+    "asset": 586896
+  },
+  "consent": {
+    "version": 1,
+    "did": "did:key:z6MkControllersInterop",
+    "sig_hint": "raw-ed25519",
+    "public_key": "Kznk7gbKyDeESSplTmarlanP4Nidus0lio_e34stsuo",
+    "signature": "9IY0w0g2V2E7gw1dF9pBAqeutghRQRIyQEDJiVQp4j9_PsAyQ3T2hvkRLLjekL2y0VTglvF6M9ndk5eOVbpGDg",
+    "signed_payload_sha256": "3d74ee9a2b786733fc69c631b049381c1ea4d095f60f9daa2ffb1328f677d5fb",
+    "request_id": "ac2-interop-request",
+    "response_id": "ac2-interop-response"
+  },
+  "payload_utf8": "{\"settlement\":{\"amount\":\"0\",\"asset\":586896,\"chain\":\"voimain-v1.0\",\"round\":24213754,\"txid\":\"75LUFZZNQNOPS3SLQRHZZKZIECEEVGGP4N3ZZ2UU2UKFFJU5WG4A\"},\"type\":\"algovoi/settlement-consent/v1\"}",
+  "notes": [
+    "signature and public_key are base64url, unpadded, as AC2 emits them",
+    "signed_payload_sha256 is over the UTF-8 JCS bytes above"
+  ]
+}

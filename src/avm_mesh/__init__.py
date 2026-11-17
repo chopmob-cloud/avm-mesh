@@ -9,7 +9,15 @@ from .anchor import AnchorWalk, walk
 from .corroborate import Corroboration, collect
 from .attestation import ConsensusAttestation, attest, verify_attestation
 from .effects import verify_settlement_amount
-from . import a2a, poc, rails, produce, service, trust
+from . import a2a, ac2, poc, rails, produce, service, trust, txn_consent
+from .txn_consent import (
+    TXN_CONSENT_KEY,
+    TXN_CONSENT_VERSION,
+    build_txn_consent,
+    preimage_digest,
+    signing_preimage,
+    verify_txn_consent,
+)
 from .produce import produce as produce_receipt
 from .service import Store, WitnessInfo
 from .trust import TrustPolicy, load_policy, verify_with_policy

@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.13.6 — the 0.13.5 page told readers to install 0.13.5 when it was published
+
+No module under `src/avm_mesh/` changed here except `__version__`. This release exists because a
+distribution's long description is frozen at build time: 0.13.5's wheel and sdist were built from the
+tree while it was still unpublished, so `pypi.org/project/avm-mesh/0.13.5/` announces "`pip install
+avm-mesh` currently installs `0.13.4`" and "Install `0.13.5` when it is published", and quotes the
+577/580 test counts from before this repository grew the doc-version guard. That is what
+`info.description` in the index returns — read back, not inferred.
+
+The code fix described there is real and present in both versions: `crossnode` refuses Nodely's two
+Voi hostnames with `AGREEMENT ONLY, NOT CORROBORATED (unknown)` and exit 2, because neither sends a
+fingerprint header the check could use to establish independence.
+
+0.13.5 is left in place rather than yanked. It is the same code as this release, nothing is wrong with
+it, and yanking would break the pins of anyone who moved to it in the meantime.
+
 ## 0.13.5 — three false claims, found by an independent review of the published 0.13.4
 
 0.13.4 is on PyPI and its defects are in what `pip install avm-mesh` serves today. A version

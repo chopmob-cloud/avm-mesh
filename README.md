@@ -627,11 +627,13 @@ independent. That is what the check above is for.
 
 ## Status
 
-**Version `0.13.5`**, published to PyPI as wheel and sdist. It supersedes `0.13.4`, which compared a
-load-balanced node label when checking independence and so accepted one provider under two hostnames as
-independent -- Voi's two public hostnames send no fingerprint header at all, and 0.13.4 reported that
-pair as corroborated. 0.13.5 answers with `independence_state` and refuses the claim; `--declared-independent`
-records a self-run node as an assertion rather than a measurement. Read `corroborated`, never `agreed`.
+**Version `0.13.6`**, published to PyPI as wheel and sdist. It carries 0.13.5's code unchanged and exists
+because a long description is frozen at build time: 0.13.5's own page still told readers to install 0.13.5
+"when it is published". The fix it carries is against `0.13.4`, which compared a load-balanced node label
+when checking independence and so accepted one provider under two hostnames as independent -- Voi's two
+public hostnames send no fingerprint header at all, and 0.13.4 reported that pair as corroborated. 0.13.5
+onwards answer with `independence_state` and refuse the claim; `--declared-independent` records a self-run
+node as an assertion rather than a measurement. Read `corroborated`, never `agreed`.
 
 The portable test gate runs **580 tests with 0 skipped** on both Python 3.12 and Python 3.10.22 (an isolated
 clean-room run: offline install from wheels only, plus the trust-boundary audit and the red-team suite), so

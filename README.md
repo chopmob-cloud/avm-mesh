@@ -1,5 +1,8 @@
 # avm-mesh
 
+
+[![PyPI](https://img.shields.io/pypi/v/avm-mesh)](https://pypi.org/project/avm-mesh/)
+
 **Settlement receipts for the Algorand and Voi mesh** — a small, self-contained proof that a
 transaction really settled, which anyone can check offline without trusting the platform that issued it.
 
